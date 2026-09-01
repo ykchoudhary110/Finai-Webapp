@@ -162,20 +162,68 @@ export default function CACopilotView() {
                   <div className="pt-2 border-t border-[#232732]">
                     <button
                       onClick={() => setExpandedTraceId(expandedTraceId === msg.id ? null : msg.id)}
-                      className="inline-flex items-center gap-1 text-xs font-mono text-[#6B7280] hover:text-[#A6ADBB] transition-colors"
+                      className="inline-flex items-center gap-1.5 text-xs font-mono text-[#5B5FEF] hover:text-[#7477F5] transition-colors font-medium"
                     >
-                      <span>Why this answer? — Statutory Trace</span>
+                      <span>Why this answer? — Statutory & Computational Trace</span>
                       {expandedTraceId === msg.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
 
                     {expandedTraceId === msg.id && (
-                      <div className="mt-2.5 p-3 rounded-xl bg-[#0B0E14] border border-[#232732] text-xs font-mono text-[#A6ADBB] space-y-1.5 animate-in fade-in">
-                        <div>● Computation Mode: Deterministic Python IEEE-754 Decimal arithmetic</div>
-                        <div>● Statutory Datasets: Central Board of Indirect Taxes & Customs (CBIC) 2024-2025</div>
-                        <div>● Tax Slabs Version: Finance (No. 2) Act, 2024 amended Section 115BAC</div>
+                      <div className="mt-2.5 p-4 rounded-xl bg-[#0B0E14] border border-[#232732] text-xs font-mono text-[#A6ADBB] space-y-3 animate-in fade-in">
+                        {/* Section 1: Step-by-Step Slab Calculation Breakdown */}
+                        {msg.tax_comparison?.trace_details?.slabs_breakdown && (
+                          <div className="space-y-1.5">
+                            <div className="text-white font-semibold text-[11px] uppercase tracking-wider flex items-center gap-1">
+                              <span>1. New Tax Regime Slab-by-Slab Computation (Budget 2024):</span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[#12151C] border border-[#232732]/60 divide-y divide-[#232732]/40 text-[11px]">
+                              {msg.tax_comparison.trace_details.slabs_breakdown.map((s, idx) => (
+                                <div key={idx} className="py-1 flex justify-between">
+                                  <span>{s.slab} ({s.rate}):</span>
+                                  <span className="text-white font-bold">{s.tax}</span>
+                                </div>
+                              ))}
+                              <div className="pt-1.5 flex justify-between font-bold text-white">
+                                <span>Total Net Tax Payable:</span>
+                                <span className="text-[#22C55E]">
+                                  ₹{msg.tax_comparison.new_regime.total_tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 2: Home Loan Filter Analysis */}
+                        {msg.tax_comparison?.trace_details?.old_regime_comparison && (
+                          <div className="space-y-1.5">
+                            <div className="text-white font-semibold text-[11px] uppercase tracking-wider flex items-center gap-1">
+                              <span>2. Why Home Loan Deductions Don't Beat the New Regime:</span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[#12151C] border border-[#232732]/60 space-y-1 text-[11px]">
+                              <div>● Old Regime Deductions Claimed: <span className="text-white">{msg.tax_comparison.trace_details.old_regime_comparison.deductions}</span></div>
+                              <div>● Old Regime Taxable Income: <span className="text-white">{msg.tax_comparison.trace_details.old_regime_comparison.taxable_income}</span></div>
+                              <div>● Old Regime Tax Payable: <span className="text-[#F59E0B] font-bold">{msg.tax_comparison.trace_details.old_regime_comparison.old_regime_tax}</span></div>
+                              <div className="text-[#22C55E] pt-1">
+                                ✔ New Regime saves you ₹{msg.tax_comparison.savings_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} because 5%, 10%, 15% slabs beat high 20% & 30% slabs!
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section 3: Statutory Rules Verified */}
+                        <div className="space-y-1 text-[11px]">
+                          <div className="text-white font-semibold text-[11px] uppercase tracking-wider">
+                            3. Statutory Provisions Applied:
+                          </div>
+                          <div>● Finance Act 2024: Section 115BAC (Revised tax slabs & ₹75,000 standard deduction)</div>
+                          <div>● Income Tax Act 1961: Section 24(b) (Max ₹2,00,000 housing interest) & Section 80C (Max ₹1.5L)</div>
+                          <div>● Central GST Act 2017: Schedule III (Employee employment strictly exempt from GST)</div>
+                        </div>
+
+                        {/* Section 4: Cryptographic Proof Checksum */}
                         {msg.audit_record && (
-                          <div className="text-[#6B7280] pt-1 border-t border-[#232732]/60">
-                            Immutable Ledger Block: #{msg.audit_record.id} · Hash: {msg.audit_record.hash}
+                          <div className="text-[#6B7280] text-[10px] pt-2 border-t border-[#232732]/60">
+                            Immutable Ledger Block: #{msg.audit_record.id} · SHA-256 Hash: {msg.audit_record.hash}
                           </div>
                         )}
                       </div>

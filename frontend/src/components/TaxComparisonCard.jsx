@@ -47,6 +47,33 @@ export default function TaxComparisonCard({ data }) {
         )}
       </div>
 
+      {/* Recommended Filing Action Banner */}
+      {data.filing_guidance && (
+        <div className="mb-4 p-4 rounded-xl bg-[#181C25] border border-[#5B5FEF]/40 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+          <div>
+            <span className="text-[11px] font-mono uppercase tracking-wider text-[#5B5FEF] font-semibold flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Recommended Filing Action</span>
+            </span>
+            <h4 className="text-sm font-bold text-white mt-1">
+              File <span className="text-[#5B5FEF]">{data.filing_guidance.recommended_form}</span> under {data.winner}
+            </h4>
+            <p className="text-xs text-[#A6ADBB] mt-0.5">
+              Portal: <span className="text-white font-mono">{data.filing_guidance.portal}</span> · Deadline: <span className="text-[#F59E0B] font-mono">{data.filing_guidance.deadline}</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-[11px] text-[#A6ADBB]">Final Net Tax You Have To Pay:</span>
+            <div className="text-xl font-mono font-bold text-[#22C55E]">
+              {formatRupees(data.filing_guidance.final_tax_to_pay)}
+            </div>
+            <span className="text-[10px] text-[#22C55E] font-mono font-medium">
+              (Direct Net Savings: {formatRupees(displayedSavings)})
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Two Column Split */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* New Regime Card */}
