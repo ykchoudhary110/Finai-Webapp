@@ -45,15 +45,19 @@ class CalculateRequest(BaseModel):
 
 @app.get("/api/status")
 def get_system_status() -> dict[str, Any]:
-    """Health check endpoint showing AI API and Market Feed connectivity."""
+    """Health check endpoint showing AI API, Search Grounding, and Market Feed connectivity."""
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash").strip()
+    has_cloud_ai = bool(gemini_key or groq_key)
     return {
         "status": "online",
         "gemini_api": {
-            "online": bool(gemini_key),
-            "model": model_name,
-            "mode": "Live Cloud AI" if gemini_key else "Deterministic High-Fidelity Synthesis",
+            "online": has_cloud_ai,
+            "model": model_name if gemini_key else "llama-3.3-70b",
+            "provider": "Google Gemini (Search Grounded)" if gemini_key else "Groq Llama 3.3" if groq_key else "Offline Synthesis",
+            "mode": "Live Cloud AI (Google Grounded)" if has_cloud_ai else "Deterministic High-Fidelity Synthesis",
+            "groq_backup": bool(groq_key),
         },
         "market_data": {
             "online": True,

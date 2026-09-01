@@ -56,46 +56,90 @@ def _extract_monetary_amounts(text: str) -> list[float]:
 
 
 def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | None:
-    """Call Google Gemini via REST endpoint with automatic fallback across models."""
+    """Call Google Gemini via REST endpoint with online search grounding and automatic model fallback."""
     configured_model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
     models = [configured_model]
     for fallback in ("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"):
         if fallback not in models:
             models.append(fallback)
 
+    # First try with Google Search Grounding enabled for live real-time statutory facts
     for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": f"{SYSTEM_PROMPT}\n\nLIVE STATUTORY CONTEXT FETCHED FROM GOVERNMENT SOURCES:\n{search_context}\n\nUSER QUESTION / SCENARIO:\n{prompt}"
-                        }
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 1200,
+        for use_search_grounding in (True, False):
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "text": (
+                                    f"{SYSTEM_PROMPT}\n\n"
+                                    f"LIVE STATUTORY CONTEXT FETCHED FROM GOVERNMENT SOURCES:\n{search_context}\n\n"
+                                    f"USER QUESTION / SCENARIO:\n{prompt}\n\n"
+                                    "INSTRUCTION: Search online and verify statutory sections under Income Tax Act 1961 "
+                                    "(Budget 2024 revisions) and CGST Act 2017 before synthesizing your final advisory."
+                                )
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "maxOutputTokens": 1200,
+                },
+            }
+            if use_search_grounding:
+                payload["tools"] = [{"googleSearch": {}}]
+
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            return parts[0].get("text", "")
+            except Exception as e:
+                if not use_search_grounding:
+                    logger.warning(f"Gemini API call failed with model '{model}': {e}")
+    return None
+
+
+def _call_groq_api(prompt: str, search_context: str, api_key: str) -> str | None:
+    """Call free Groq Llama 3.3 70B API as high-speed alternative provider."""
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": f"{SYSTEM_PROMPT}\n\nSTATUTORY CONTEXT:\n{search_context}"},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 1200,
+    }
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
             },
-        }
-        try:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "")
-        except Exception as e:
-            logger.warning(f"Gemini API call failed with model '{model}': {e}")
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+    except Exception as e:
+        logger.warning(f"Groq API call failed: {e}")
     return None
 
 
@@ -218,20 +262,41 @@ def orchestrate_ca_consultation(user_query: str) -> dict[str, Any]:
                 "computed_by": "RuleEngine:GST_Deterministic",
             }
 
-    # Step 3: Generate AI Advisory (via Gemini or Verified Local Fallback)
+    # Step 3: Generate AI Advisory (via Gemini Search Grounding, Groq Free Backup, or Verified Synthesis)
     ai_narrative = None
-    if api_key:
-        math_summary = ""
-        if tax_comparison_card:
-            math_summary = f"COMPUTED MATH: On Gross ₹{primary_amount:,.2f}, New Regime Tax is ₹{tax_comparison_card['new_regime']['total_tax']:,.2f}, Old Regime Tax is ₹{tax_comparison_card['old_regime']['total_tax']:,.2f}. Winner saves ₹{tax_comparison_card['savings_amount']:,.2f}."
-        elif verified_math_card:
-            math_summary = f"COMPUTED MATH: {verified_math_card['title']} => Total Tax: ₹{verified_math_card.get('effective_tax', verified_math_card.get('gst_amount', 0)):,.2f}."
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
 
-        augmented_prompt = f"{user_query}\n\n[RULE ENGINE OUTPUT TO INTEGRATE INTO ADVISORY: {math_summary}]"
+    math_summary = ""
+    if tax_comparison_card:
+        math_summary = (
+            f"STATUTORY TAX MATH: On Annual Salary/Income of ₹{primary_amount:,.2f}, New Regime (Sec 115BAC) Tax is ₹{tax_comparison_card['new_regime']['total_tax']:,.2f} "
+            f"(with ₹75,000 Standard Deduction under Sec 16(ia)). Old Regime Tax is ₹{tax_comparison_card['old_regime']['total_tax']:,.2f}. "
+            f"The {tax_comparison_card['winner']} saves ₹{tax_comparison_card['savings_amount']:,.2f}. "
+            f"NOTE: Under Schedule III of the CGST Act 2017, employee salary is strictly EXEMPT from GST. Do not mention 18% GST or SAC codes."
+        )
+    elif verified_math_card and verified_math_card.get("type") == "gst_computation":
+        math_summary = f"STATUTORY GST MATH: {verified_math_card['title']} => Taxable Value: ₹{primary_amount:,.2f}, Rate: {verified_math_card['rate']}%, GST: ₹{verified_math_card['gst_amount']:,.2f}."
+    elif verified_math_card:
+        math_summary = f"STATUTORY MATH: {verified_math_card['title']} => Total Tax: ₹{verified_math_card.get('effective_tax', 0):,.2f}."
+
+    augmented_prompt = (
+        f"USER SCENARIO: {user_query}\n\n"
+        f"[DETERMINISTIC VERIFIED STATUTORY COMPUTATION: {math_summary}]\n\n"
+        "INSTRUCTION: Synthesize this into a structured professional CA Advisory Memorandum. "
+        "Explicitly cite relevant statutory sections (Income Tax Act 1961, Finance Act 2024, or CGST Act 2017). "
+        "If this is employment salary, highlight standard deduction under Section 16(ia) and affirm that employment is exempt from GST under Schedule III."
+    )
+
+    # 1. Primary: Google Gemini with Live Search Grounding
+    if api_key:
         ai_narrative = _call_gemini_rest(augmented_prompt, search_context_str, api_key)
 
+    # 2. Free Secondary Backup: Groq Llama 3.3 70B
+    if not ai_narrative and groq_key:
+        ai_narrative = _call_groq_api(augmented_prompt, search_context_str, groq_key)
+
+    # 3. Deterministic Institutional Legal Synthesis (100% offline-ready fallback)
     if not ai_narrative:
-        # High-grade deterministic template synthesis with real citations
         ai_narrative = _generate_institutional_synthesis(
             user_query, primary_amount, tax_comparison_card, verified_math_card, search_results
         )
@@ -242,7 +307,7 @@ def orchestrate_ca_consultation(user_query: str) -> dict[str, Any]:
         "tax_comparison_card": tax_comparison_card,
         "verified_math_card": verified_math_card,
         "citations": search_results,
-        "api_online": bool(api_key),
+        "api_online": bool(api_key or groq_key),
     }
 
 
