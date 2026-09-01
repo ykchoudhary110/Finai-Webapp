@@ -70,6 +70,21 @@ def get_system_status() -> dict[str, Any]:
     }
 
 
+@app.get("/api/list-models")
+def list_models_debug():
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        return {"error": "no key"}
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode())
+            return [m.get("name") for m in data.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/api/test-gemini")
 def test_gemini_debug() -> dict[str, Any]:
     """Diagnostic endpoint to verify Gemini API connectivity on Render."""
