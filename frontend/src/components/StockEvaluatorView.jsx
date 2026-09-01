@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, TrendingUp, AlertTriangle, CheckCircle, ShieldAlert, BarChart3, Building2 } from 'lucide-react';
 import StockGauge from './StockGauge';
+import MarketIndicesBar from './MarketIndicesBar';
 import { getApiUrl } from '../api';
 
 export default function StockEvaluatorView() {
@@ -46,6 +47,9 @@ export default function StockEvaluatorView() {
           <strong className="text-[#F5F6FA]">SEBI Educational Risk Analysis:</strong> Quantitative balance-sheet and volatility assessment only. FinAI does not offer investment advice or recommendations to Buy, Sell, or Hold any security.
         </p>
       </div>
+
+      {/* Real-Time Indian Benchmark Indices (NIFTY 50 & SENSEX) with Trend Graphs and Health Scores */}
+      <MarketIndicesBar onSelectTicker={handleEvaluate} />
 
       {/* Ticker Search Bar */}
       <div className="p-5 bg-[#12151C] border border-[#232732] rounded-2xl shadow-inner-glow space-y-3">

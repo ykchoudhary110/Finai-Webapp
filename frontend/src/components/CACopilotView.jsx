@@ -3,6 +3,7 @@ import { Send, Sparkles, AlertCircle, ChevronDown, ChevronUp, Bot, User, ArrowRi
 import CitationPopover from './CitationPopover';
 import TaxComparisonCard from './TaxComparisonCard';
 import VerifiedMathCard from './VerifiedMathCard';
+import FormattedNarrative from './FormattedNarrative';
 import { getApiUrl } from '../api';
 
 export default function CACopilotView() {
@@ -136,9 +137,9 @@ export default function CACopilotView() {
                     )}
                   </div>
 
-                  {/* AI Narrative Body */}
-                  <div className="text-sm text-[#A6ADBB] leading-relaxed space-y-2 whitespace-pre-line font-sans">
-                    {msg.narrative}
+                  {/* AI Narrative Body (Formatted clean text, not raw symbols) */}
+                  <div className="text-sm text-[#A6ADBB] leading-relaxed">
+                    <FormattedNarrative text={msg.narrative} />
                   </div>
 
                   {/* Deterministic Tax Regime Comparison Card (if present) */}

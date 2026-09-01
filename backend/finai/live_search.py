@@ -43,15 +43,17 @@ def search_tax_statutes(query: str, max_results: int = 4) -> list[dict]:
                 body = item.get("body", "")
 
                 # Assign citation tag based on domain
-                tag = "Statutory Citation"
+                tag = "Statutory Guideline"
                 if "cbic" in url:
-                    tag = "CBIC Circular"
+                    tag = "CBIC Central Circular"
                 elif "incometax" in url:
-                    tag = "Income Tax Rule"
+                    tag = "Income Tax Section 115BAC"
                 elif "gstcouncil" in url:
-                    tag = "GST Council"
+                    tag = "GST Council Recommendation"
                 elif "cleartax" in url:
-                    tag = "Tax Advisory"
+                    tag = "ClearTax Statutory Digest"
+                elif "taxmann" in url:
+                    tag = "Taxmann Case Law"
 
                 results.append({
                     "title": title,

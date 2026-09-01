@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from finai.ai_orchestrator import orchestrate_ca_consultation
-from finai.stock_engine import evaluate_stock_risk
+from finai.stock_engine import evaluate_stock_risk, get_market_indices
 from finai.storage import save_record, get_history
 from finai.rules import gst, income_tax, capital_gains, emi, hra_exemption, presumptive_44ada, presumptive_44ad
 
@@ -109,6 +109,15 @@ def get_stock_risk(ticker: str = Query(..., min_length=1, description="Stock tic
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Stock assessment error: {str(e)}")
+
+
+@app.get("/api/market-indices")
+def get_indices() -> dict[str, Any]:
+    """Return live Nifty 50 and Sensex benchmarks with health scores and sparkline trend graphs."""
+    try:
+        return get_market_indices()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Market indices error: {str(e)}")
 
 
 @app.post("/api/calculate")
