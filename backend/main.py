@@ -39,6 +39,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=2, description="User question or financial scenario")
     mode: str = Field(default="auto", description="auto | salary | gst")
+    history: list[dict] = Field(default_factory=list, description="Recent conversation turns for context")
 
 
 class CalculateRequest(BaseModel):
@@ -51,7 +52,7 @@ def get_system_status() -> dict[str, Any]:
     """Health check endpoint showing AI API, Search Grounding, and Market Feed connectivity."""
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash").strip()
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
     has_cloud_ai = bool(gemini_key or groq_key)
     return {
         "status": "online",
@@ -89,9 +90,8 @@ def list_models_debug():
 def test_gemini_debug() -> dict[str, Any]:
     """Diagnostic endpoint to verify Gemini API connectivity on Render."""
     key = os.environ.get("GEMINI_API_KEY", "").strip()
-    model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
     results = {}
-    for m in [model, "gemini-1.5-flash", "gemini-2.0-flash"]:
+    for m in ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-3.6-flash"]:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
         payload = {"contents": [{"parts": [{"text": "Say OK"}]}]}
         try:
@@ -109,11 +109,11 @@ def test_gemini_debug() -> dict[str, Any]:
 def handle_chat(req: ChatRequest) -> dict[str, Any]:
     """
     Handle natural language financial scenarios.
-    Executes live statutory search, deterministic math engines, and AI synthesis.
+    Executes live statutory search, contextual memory, and Google-grounded AI synthesis.
     Logs transaction to cryptographic SHA-256 audit ledger.
     """
     try:
-        response = orchestrate_ca_consultation(req.query, mode=req.mode)
+        response = orchestrate_ca_consultation(req.query, mode=req.mode, history=req.history)
         # Save to audit ledger
         audit_record = save_record(
             kind="ca_consultation",

@@ -30,10 +30,15 @@ export default function CACopilotView() {
     setLoading(true);
 
     try {
+      const conversationHistory = messages.slice(-6).map((m) => ({
+        role: m.role,
+        content: m.narrative || m.content || '',
+      }));
+
       const res = await fetch(getApiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, mode: mode }),
+        body: JSON.stringify({ query: q, mode: mode, history: conversationHistory }),
       });
       const data = await res.json();
 

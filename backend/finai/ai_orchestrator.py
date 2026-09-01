@@ -57,13 +57,17 @@ def _extract_monetary_amounts(text: str) -> list[float]:
 
 def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | None:
     """Call Google Gemini via REST endpoint with online search grounding and automatic model fallback."""
-    configured_model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
-    models = [configured_model]
-    for fallback in ("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"):
-        if fallback not in models:
-            models.append(fallback)
+    configured_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    candidate_models = [
+        configured_model,
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.5-pro",
+        "gemini-3.6-flash",
+    ]
+    seen = set()
+    models = [m for m in candidate_models if not (m in seen or seen.add(m))]
 
-    # First try with Google Search Grounding enabled for live real-time statutory facts
     for model in models:
         for use_search_grounding in (True, False):
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
@@ -76,20 +80,20 @@ def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | N
                                     f"{SYSTEM_PROMPT}\n\n"
                                     f"LIVE STATUTORY CONTEXT FETCHED FROM GOVERNMENT SOURCES:\n{search_context}\n\n"
                                     f"USER QUESTION / SCENARIO:\n{prompt}\n\n"
-                                    "INSTRUCTION: Search online and verify statutory sections under Income Tax Act 1961 "
-                                    "(Budget 2024 revisions) and CGST Act 2017 before synthesizing your final advisory."
+                                    "INSTRUCTION: Search online and verify current statutory sections under the Income Tax Act 1961 "
+                                    "(Budget 2024 revisions) and CGST Act 2017 before answering."
                                 )
                             }
                         ]
                     }
                 ],
                 "generationConfig": {
-                    "temperature": 0.2,
-                    "maxOutputTokens": 1200,
+                    "temperature": 0.3,
+                    "maxOutputTokens": 1500,
                 },
             }
             if use_search_grounding:
-                payload["tools"] = [{"googleSearch": {}}]
+                payload["tools"] = [{"google_search": {}}]
 
             try:
                 req = urllib.request.Request(
@@ -143,13 +147,14 @@ def _call_groq_api(prompt: str, search_context: str, api_key: str) -> str | None
     return None
 
 
-def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str, Any]:
+def orchestrate_ca_consultation(user_query: str, mode: str = "auto", history: list[dict] | None = None) -> dict[str, Any]:
     """
     Main neuro-symbolic agent orchestrator:
-    1. Fetches live statutory context via web search.
-    2. Runs deterministic rule engines on detected amounts and scenarios.
-    3. Calls Gemini API for institutional commentary, or uses verified template synthesis if key is missing.
-    4. Attaches verified math cards and statutory citation pills.
+    1. Ingests conversation history for contextual memory.
+    2. Fetches live statutory context via web search.
+    3. Runs deterministic rule engines on detected amounts and scenarios.
+    4. Calls Gemini API (gemini-2.5-flash) with Google Search Grounding for human-like CA advisory.
+    5. Attaches verified math cards ONLY when calculations are requested.
     """
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     amounts = _extract_monetary_amounts(user_query)
@@ -165,6 +170,10 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str
     verified_math_card = None
     tax_comparison_card = None
     q_lower = user_query.lower()
+
+    # Check for Home Loan / Deductions / How to file tax
+    is_home_loan = bool(re.search(r"\b(home\s*loan|housing\s*loan|loan|emi|borrowed|mortgage)\b", q_lower))
+    is_how_to_file = bool(re.search(r"\b(how\s+to\s+file|filing|file\s+thsi\s+tax|file\s+this\s+tax|file\s+tax|itr|sahaj)\b", q_lower))
 
     if mode == "salary":
         is_salary_or_employment = True
@@ -186,7 +195,7 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str
         ))
 
         # Check for GST transaction intent (strict word boundaries to prevent 'sale' inside 'salery')
-        is_gst = not is_salary_or_employment and bool(re.search(
+        is_gst = not is_salary_or_employment and not is_home_loan and bool(re.search(
             r"\b(gst|sales|sale|purchase|purchased|invoice|invoicing|hsn|sac|interstate|igst|cgst|sgst|itc)\b",
             q_lower
         ))
@@ -198,7 +207,7 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str
         ))
 
         # Check for Freelancer / Presumptive intent
-        is_presumptive = not is_salary_or_employment and bool(re.search(
+        is_presumptive = not is_salary_or_employment and not is_home_loan and bool(re.search(
             r"\b(freelancer|freelance|consultant|consulting|44ada|44ad|turnover|contractor)\b",
             q_lower
         ))
@@ -209,14 +218,8 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str
             q_lower
         ))
 
-    # Check for Home Loan / Deductions / How to file tax
-    is_home_loan = bool(re.search(r"\b(home\s*loan|housing\s*loan|loan|emi|borrowed|mortgage)\b", q_lower))
-    is_how_to_file = bool(re.search(r"\b(how\s+to\s+file|filing|file\s+thsi\s+tax|file\s+this\s+tax|file\s+tax|itr|sahaj)\b", q_lower))
-
-    # Execute math when amounts exist
+    # Execute calculations ONLY when appropriate (never treat home loan as salary)
     if is_home_loan or is_how_to_file:
-        # User is inquiring about loan deductions and tax filing, NOT gross salary!
-        # Do not mistake loan amount (e.g. ₹40L) for salary.
         verified_math_card = {
             "type": "home_loan_analysis",
             "title": "Home Loan Statutory Tax Deductions (Section 24b & 80C)",
@@ -294,7 +297,19 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str
                 "computed_by": "RuleEngine:GST_Deterministic",
             }
 
-    # Step 3: Generate AI Advisory (via Gemini Search Grounding, Groq Free Backup, or Verified Synthesis)
+    # Step 3: Format conversation history
+    history_str = ""
+    if history:
+        turns = []
+        for h in history[-4:]:
+            role = "User" if h.get("role") == "user" else "AI Chartered Accountant"
+            content = h.get("content") or h.get("narrative") or ""
+            if content:
+                turns.append(f"{role}: {content[:350]}")
+        if turns:
+            history_str = "PREVIOUS CONVERSATION CONTEXT:\n" + "\n".join(turns) + "\n\n"
+
+    # Step 4: Generate AI Advisory (via Gemini Search Grounding, Groq Free Backup, or Verified Synthesis)
     ai_narrative = None
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
 
@@ -306,17 +321,22 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str
             f"The {tax_comparison_card['winner']} saves ₹{tax_comparison_card['savings_amount']:,.2f}. "
             f"NOTE: Under Schedule III of the CGST Act 2017, employee salary is strictly EXEMPT from GST. Do not mention 18% GST or SAC codes."
         )
+    elif verified_math_card and verified_math_card.get("type") == "home_loan_analysis":
+        math_summary = "HOME LOAN RULES: Section 24(b) permits up to ₹2,00,000 interest deduction in Old Regime. Section 80C permits up to ₹1,50,000 principal deduction in Old Regime. In New Regime (Section 115BAC), self-occupied home loan deductions are disallowed."
     elif verified_math_card and verified_math_card.get("type") == "gst_computation":
         math_summary = f"STATUTORY GST MATH: {verified_math_card['title']} => Taxable Value: ₹{primary_amount:,.2f}, Rate: {verified_math_card['rate']}%, GST: ₹{verified_math_card['gst_amount']:,.2f}."
     elif verified_math_card:
         math_summary = f"STATUTORY MATH: {verified_math_card['title']} => Total Tax: ₹{verified_math_card.get('effective_tax', 0):,.2f}."
 
     augmented_prompt = (
-        f"USER SCENARIO: {user_query}\n\n"
-        f"[DETERMINISTIC VERIFIED STATUTORY COMPUTATION: {math_summary}]\n\n"
-        "INSTRUCTION: Synthesize this into a structured professional CA Advisory Memorandum. "
-        "Explicitly cite relevant statutory sections (Income Tax Act 1961, Finance Act 2024, or CGST Act 2017). "
-        "If this is employment salary, highlight standard deduction under Section 16(ia) and affirm that employment is exempt from GST under Schedule III."
+        f"{history_str}"
+        f"USER CURRENT QUESTION: {user_query}\n\n"
+        f"[STATUTORY COMPUTATION RULES: {math_summary}]\n\n"
+        "INSTRUCTIONS FOR AI CHARTERED ACCOUNTANT:\n"
+        "1. Respond conversationally, authoritatively, and clearly like a real Senior Chartered Accountant.\n"
+        "2. Directly answer all parts of the user's question (e.g. how to file, which form to use, bank documents, deadlines, and exact tax savings).\n"
+        "3. Explicitly cite statutory provisions (e.g. Section 115BAC, Section 24b, Section 80C, Schedule III of CGST Act).\n"
+        "4. Seamlessly use previous conversation context (e.g. if the user previously stated their salary is ₹15 Lakhs, apply the home loan rules to that exact ₹15 Lakh salary)."
     )
 
     # 1. Primary: Google Gemini with Live Search Grounding
