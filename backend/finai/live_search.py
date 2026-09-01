@@ -35,7 +35,7 @@ def search_tax_statutes(query: str, max_results: int = 4) -> list[dict]:
     enhanced_query = f"{query} India tax GST CBIC incometax site:gov.in OR site:cleartax.in"
     results = []
     try:
-        with DDGS() as ddgs:
+        with DDGS(timeout=2) as ddgs:
             raw_results = list(ddgs.text(enhanced_query, max_results=max_results))
             for item in raw_results:
                 title = item.get("title", "Statutory Reference")
