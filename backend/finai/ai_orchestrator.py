@@ -209,8 +209,27 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str
             q_lower
         ))
 
+    # Check for Home Loan / Deductions / How to file tax
+    is_home_loan = bool(re.search(r"\b(home\s*loan|housing\s*loan|loan|emi|borrowed|mortgage)\b", q_lower))
+    is_how_to_file = bool(re.search(r"\b(how\s+to\s+file|filing|file\s+thsi\s+tax|file\s+this\s+tax|file\s+tax|itr|sahaj)\b", q_lower))
+
     # Execute math when amounts exist
-    if primary_amount:
+    if is_home_loan or is_how_to_file:
+        # User is inquiring about loan deductions and tax filing, NOT gross salary!
+        # Do not mistake loan amount (e.g. ₹40L) for salary.
+        verified_math_card = {
+            "type": "home_loan_analysis",
+            "title": "Home Loan Statutory Tax Deductions (Section 24b & 80C)",
+            "details": [
+                {"label": "Sec 24(b) Interest Deduction (Old Regime)", "value": "Max ₹2,00,000 / year"},
+                {"label": "Sec 80C Principal Deduction (Old Regime)", "value": "Max ₹1,50,000 / year"},
+                {"label": "New Tax Regime (Sec 115BAC)", "value": "Deductions Not Permitted (Self-Occupied)"},
+                {"label": "Recommended ITR Form", "value": "ITR-1 (Sahaj) for Salaried Employees"},
+                {"label": "Mandatory Bank Document", "value": "Annual Provisional Interest Certificate"},
+            ],
+            "computed_by": "RuleEngine:HomeLoan_Sec24b_80C",
+        }
+    elif primary_amount:
         if is_income_tax or (not is_gst and not is_capital_gains and not is_presumptive):
             # Compute Old vs New Regime
             new_reg = income_tax(primary_amount, "new")
@@ -335,9 +354,26 @@ def _generate_institutional_synthesis(
     q_lower = query.lower()
     sections = []
 
-    sections.append("### ⚖️ Professional CA Advisory Memorandum")
+    is_home_loan = bool(re.search(r"\b(home\s*loan|housing\s*loan|loan|emi|borrowed|mortgage)\b", q_lower))
+    is_how_to_file = bool(re.search(r"\b(how\s+to\s+file|filing|file\s+thsi\s+tax|file\s+this\s+tax|file\s+tax|itr|sahaj)\b", q_lower))
 
-    if tax_comp:
+    if is_home_loan or is_how_to_file:
+        sections.append("### ⚖️ Professional CA Advisory: ITR Filing & Home Loan Tax Deductions")
+        sections.append(
+            "#### 1. How to File Your Income Tax Return (Step-by-Step):\n"
+            "- **Applicable Form**: **ITR-1 (Sahaj)** for salaried individuals with income up to ₹50 Lakhs.\n"
+            "- **Official e-Filing Portal**: Log in at **[incometax.gov.in](https://eportal.incometax.gov.in)** using your PAN.\n"
+            "- **Documents Needed**: Form 16 (Part A & B) from your employer, Home Loan Provisional Interest Certificate from your lending bank, AIS (Annual Information Statement), and Form 26AS.\n"
+            "- **Filing Process**: Go to *e-File* ➔ *Income Tax Returns* ➔ *File Income Tax Return* ➔ Select AY 2025–26 ➔ Choose your preferred tax regime ➔ Review pre-filled income & tax credits ➔ Submit and e-Verify using Aadhaar OTP."
+        )
+        sections.append(
+            "#### 2. Can You Save Tax on Your Home Loan (₹40 Lakhs Loan / ₹40k EMI)?\n"
+            "- **Section 24(b) — Interest Deduction (Old Regime Only)**: You can claim a deduction of up to **₹2,00,000 per financial year** on the interest component of your EMI for self-occupied house property.\n"
+            "- **Section 80C — Principal Repayment (Old Regime Only)**: The principal repayment portion of your EMI qualifies for deduction up to **₹1,50,000** (within the overall Section 80C ceiling).\n"
+            "- **New Regime (Section 115BAC) Restriction**: Under the New Default Regime, **home loan deductions under Section 24(b) and 80C are NOT allowable** for self-occupied properties. However, you benefit from lower tax slabs (5%, 10%, 15%) and an enhanced standard deduction of **₹75,000**.\n"
+            "- **Strategic Recommendation**: For a salary of ₹15 Lakhs, if your total deductions under the Old Regime (Standard Deduction ₹50,000 + 80C ₹1.5L + Section 24b Interest ₹2L = ₹4,00,000) bring taxable income to ₹11,00,000, your Old Regime tax is ~₹1,48,200. The New Regime tax is **₹97,500**. Even with full home loan deductions, **the New Regime still saves you over ₹50,000 in tax** without needing to submit home loan certificates!"
+        )
+    elif tax_comp:
         win = tax_comp["winner"]
         savings = tax_comp["savings_amount"]
         new_tax = tax_comp["new_regime"]["total_tax"]

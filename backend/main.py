@@ -68,6 +68,26 @@ def get_system_status() -> dict[str, Any]:
     }
 
 
+@app.get("/api/test-gemini")
+def test_gemini_debug() -> dict[str, Any]:
+    """Diagnostic endpoint to verify Gemini API connectivity on Render."""
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    results = {}
+    for m in [model, "gemini-1.5-flash", "gemini-2.0-flash"]:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
+        payload = {"contents": [{"parts": [{"text": "Say OK"}]}]}
+        try:
+            req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                results[m] = {"status": "success", "preview": json.loads(r.read().decode())}
+        except urllib.error.HTTPError as he:
+            results[m] = {"status": "http_error", "code": he.code, "body": he.read().decode()}
+        except Exception as e:
+            results[m] = {"status": "error", "message": str(e)}
+    return results
+
+
 @app.post("/api/chat")
 def handle_chat(req: ChatRequest) -> dict[str, Any]:
     """
