@@ -115,7 +115,7 @@ def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | N
                 ],
                 "generationConfig": {
                     "temperature": 0.3,
-                    "maxOutputTokens": 1500,
+                    "maxOutputTokens": 3000,
                 },
             }
             if use_search_grounding:
