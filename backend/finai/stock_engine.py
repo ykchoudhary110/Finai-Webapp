@@ -87,6 +87,41 @@ COMMON_ALIASES = {
     "SUNPHARMA": "SUNPHARMA",
     "HCL TECH": "HCLTECH",
     "HCLTECH": "HCLTECH",
+    "TECH MAHINDRA": "TECHM",
+    "TECHMAHINDRA": "TECHM",
+    "TECHM": "TECHM",
+    "MAHINDRA": "M&M",
+    "M&M": "M&M",
+    "MAHINDRA & MAHINDRA": "M&M",
+    "HERO": "HEROMOTOCO",
+    "HERO MOTOCORP": "HEROMOTOCO",
+    "HEROMOTOCO": "HEROMOTOCO",
+    "BAJAJ AUTO": "BAJAJ-AUTO",
+    "EICHER": "EICHERMOT",
+    "EICHER MOTORS": "EICHERMOT",
+    "EICHERMOT": "EICHERMOT",
+    "NESTLE": "NESTLEIND",
+    "NESTLE INDIA": "NESTLEIND",
+    "NESTLEIND": "NESTLEIND",
+    "APOLLO HOSPITALS": "APOLLOHOSP",
+    "APOLLOHOSP": "APOLLOHOSP",
+    "COAL INDIA": "COALINDIA",
+    "COALINDIA": "COALINDIA",
+    "POWER GRID": "POWERGRID",
+    "POWERGRID": "POWERGRID",
+    "JSW STEEL": "JSWSTEEL",
+    "JSWSTEEL": "JSWSTEEL",
+    "DR REDDY": "DRREDDY",
+    "DRREDDY": "DRREDDY",
+    "DIVIS LAB": "DIVISLAB",
+    "DIVISLAB": "DIVISLAB",
+    "BPCL": "BPCL",
+    "BEL": "BEL",
+    "HAL": "HAL",
+    "BHEL": "BHEL",
+    "TRENT": "TRENT",
+    "VBL": "VBL",
+    "VARUN BEVERAGES": "VBL",
 }
 
 
@@ -203,6 +238,12 @@ def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
                     was_auto_corrected = True
             except Exception:
                 pass
+
+    if current_price == 0.0 and not info.get("shortName"):
+        raise ValueError(
+            f"Unable to retrieve live market data for '{ticker_input}'. "
+            f"Please check the company name or enter its NSE ticker (e.g. RELIANCE, TCS, TECHM)."
+        )
 
     company_name = (
         info.get("shortName")
