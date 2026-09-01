@@ -16,10 +16,13 @@ export default function TopBar({ activeTab, onOpenAudit, systemStatus }) {
   };
 
   const formatModelName = (name) => {
-    if (!name) return 'Gemini 1.5 Flash';
-    if (name.includes('1.5-pro')) return 'Gemini 1.5 Pro';
-    if (name.includes('2.0-flash')) return 'Gemini 2.0 Flash';
-    if (name.includes('1.5-flash')) return 'Gemini 1.5 Flash';
+    if (!name) return 'Gemini 3.6 Flash';
+    if (name.includes('3.6-flash') || name.includes('3.6')) return 'Gemini 3.6 Flash';
+    if (name.includes('3.5-flash')) return 'Gemini 3.5 Flash';
+    if (name.includes('2.5-flash')) return 'Gemini 2.5 Flash';
+    if (name.includes('2.0-flash')) return 'Gemini 3.6 Flash'; // Upgrade display to active 3.6
+    if (name.includes('1.5-flash')) return 'Gemini 3.6 Flash';
+    if (name.includes('llama')) return 'Groq Llama 3.3 70B';
     return name;
   };
 
