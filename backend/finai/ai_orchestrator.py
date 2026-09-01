@@ -56,40 +56,46 @@ def _extract_monetary_amounts(text: str) -> list[float]:
 
 
 def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | None:
-    """Call Google Gemini via REST endpoint (supports gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash)."""
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": f"{SYSTEM_PROMPT}\n\nLIVE STATUTORY CONTEXT FETCHED FROM GOVERNMENT SOURCES:\n{search_context}\n\nUSER QUESTION / SCENARIO:\n{prompt}"
-                    }
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.2,
-            "maxOutputTokens": 1200,
-        },
-    }
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            candidates = data.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if parts:
-                    return parts[0].get("text", "")
-    except Exception as e:
-        logger.warning(f"Gemini API call failed: {e}")
+    """Call Google Gemini via REST endpoint with automatic fallback across models."""
+    configured_model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    models = [configured_model]
+    for fallback in ("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"):
+        if fallback not in models:
+            models.append(fallback)
+
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": f"{SYSTEM_PROMPT}\n\nLIVE STATUTORY CONTEXT FETCHED FROM GOVERNMENT SOURCES:\n{search_context}\n\nUSER QUESTION / SCENARIO:\n{prompt}"
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 1200,
+            },
+        }
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return parts[0].get("text", "")
+        except Exception as e:
+            logger.warning(f"Gemini API call failed with model '{model}': {e}")
     return None
 
 
@@ -116,14 +122,35 @@ def orchestrate_ca_consultation(user_query: str) -> dict[str, Any]:
     tax_comparison_card = None
     q_lower = user_query.lower()
 
-    # Check for GST transaction intent
-    is_gst = any(k in q_lower for k in ("gst", "sale", "purchase", "invoice", "hsn", "sac", "interstate", "itc"))
-    # Check for Salary / Personal Tax intent
-    is_income_tax = any(k in q_lower for k in ("salary", "income tax", "regime", "deduction", "80c", "hra", "115bac"))
+    # Explicit Salary / Employment check (handles typos: 'salery', 'salary', 'job', 'company', 'ctc', 'package')
+    is_salary_or_employment = bool(re.search(
+        r"\b(salery|salary|salaries|salaried|job|employed|employee|employment|ctc|annually|annual\s+income|per\s+annum|per\s+month|package|form\s*16|working\s+on\s+a\s+company|working\s+in\s+a\s+company|company\s+adn\s+got|company\s+and\s+got)\b",
+        q_lower
+    ))
+
+    # Check for GST transaction intent (strict word boundaries to prevent 'sale' inside 'salery')
+    is_gst = not is_salary_or_employment and bool(re.search(
+        r"\b(gst|sales|sale|purchase|purchased|invoice|invoicing|hsn|sac|interstate|igst|cgst|sgst|itc)\b",
+        q_lower
+    ))
+
     # Check for Capital Gains intent
-    is_capital_gains = any(k in q_lower for k in ("capital gain", "stcg", "ltcg", "mutual fund", "shares", "equity", "stocks"))
+    is_capital_gains = bool(re.search(
+        r"\b(capital\s+gain|capital\s+gains|stcg|ltcg|mutual\s+fund|mutual\s+funds|shares|equity|stocks)\b",
+        q_lower
+    ))
+
     # Check for Freelancer / Presumptive intent
-    is_presumptive = any(k in q_lower for k in ("freelancer", "freelance", "consultant", "44ada", "44ad", "turnover", "developer", "remote"))
+    is_presumptive = not is_salary_or_employment and bool(re.search(
+        r"\b(freelancer|freelance|consultant|consulting|44ada|44ad|turnover|contractor)\b",
+        q_lower
+    ))
+
+    # Check for Personal Income Tax intent
+    is_income_tax = is_salary_or_employment or bool(re.search(
+        r"\b(income\s+tax|tax\s+regime|regime|deduction|80c|80d|hra|115bac|slab|slabs|tax\s+saving|old\s+regime|new\s+regime)\b",
+        q_lower
+    ))
 
     # Execute math when amounts exist
     if primary_amount:
@@ -239,14 +266,15 @@ def _generate_institutional_synthesis(
         old_tax = tax_comp["old_regime"]["total_tax"]
 
         sections.append(
-            f"Based on your gross income of **₹{amount:,.2f}**, the **{win}** is significantly more tax-efficient. "
-            f"Adopting this strategy results in a direct net tax savings of **₹{savings:,.2f}** for the assessment year."
+            f"Based on your gross annual salary/income of **₹{amount:,.2f}**, the **{win}** is significantly more tax-efficient. "
+            f"Adopting this regime results in a direct net tax savings of **₹{savings:,.2f}** for AY 2025–26."
         )
         sections.append(
             "#### Key Statutory Frameworks Applied:\n"
-            "- **Section 115BAC (New Default Regime)**: Slabs revised under Finance Act 2024 with standard deduction enhanced to **₹75,000**.\n"
-            "- **Section 87A Tax Rebate**: Full rebate available up to ₹12,00,000 taxable income, resulting in ₹0 net tax liability for qualifying brackets.\n"
-            "- **Chapter VI-A Deductions**: In Old Regime, investments under 80C/80D/NPS are evaluated against the enhanced New Regime thresholds."
+            f"- **Standard Deduction (Section 16(ia))**: Enhanced to **₹75,000** under Section 115BAC (Finance Act 2024), reducing taxable salary to **₹{max(0.0, amount - 75000):,.2f}**.\n"
+            f"- **New Regime Tax Liability**: **₹{new_tax:,.2f}** (effective tax rate: {new_tax / amount * 100:.1f}%).\n"
+            f"- **Old Regime Tax Liability**: **₹{old_tax:,.2f}** (with standard deduction ₹50,000 + Section 80C deductions).\n"
+            "- **GST Exemption (Schedule III, CGST Act 2017)**: Services rendered by an employee to an employer in the course of employment are **strictly OUTSIDE the scope of GST**. No GST invoice, tax registration, or 18% liability applies to your salary."
         )
     elif math_card and math_card.get("type") == "presumptive_44ada":
         sections.append(
