@@ -3,6 +3,7 @@ import { Send, Sparkles, AlertCircle, ChevronDown, ChevronUp, Bot, User, ArrowRi
 import CitationPopover from './CitationPopover';
 import TaxComparisonCard from './TaxComparisonCard';
 import VerifiedMathCard from './VerifiedMathCard';
+import { getApiUrl } from '../api';
 
 export default function CACopilotView() {
   const [query, setQuery] = useState('');
@@ -27,7 +28,7 @@ export default function CACopilotView() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(getApiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q }),

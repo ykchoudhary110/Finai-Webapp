@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Copy, Check, Download, History, Shield, RefreshCw } from 'lucide-react';
+import { getApiUrl } from '../api';
 
 export default function AuditDrawer({ isOpen, onClose }) {
   const [logs, setLogs] = useState([]);
@@ -9,7 +10,7 @@ export default function AuditDrawer({ isOpen, onClose }) {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/audit-logs?limit=40');
+      const res = await fetch(getApiUrl('/api/audit-logs?limit=40'));
       const data = await res.json();
       setLogs(data.records || []);
     } catch (e) {

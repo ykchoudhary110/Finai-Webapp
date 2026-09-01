@@ -4,6 +4,7 @@ import TopBar from './components/TopBar';
 import CACopilotView from './components/CACopilotView';
 import StockEvaluatorView from './components/StockEvaluatorView';
 import AuditDrawer from './components/AuditDrawer';
+import { getApiUrl } from './api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('copilot');
@@ -12,7 +13,7 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState(null);
 
   useEffect(() => {
-    fetch('/api/status')
+    fetch(getApiUrl('/api/status'))
       .then((res) => res.json())
       .then((data) => setSystemStatus(data))
       .catch((err) => console.error("Status fetch error", err));

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, TrendingUp, AlertTriangle, CheckCircle, ShieldAlert, BarChart3, Building2 } from 'lucide-react';
 import StockGauge from './StockGauge';
+import { getApiUrl } from '../api';
 
 export default function StockEvaluatorView() {
   const [tickerInput, setTickerInput] = useState('RELIANCE');
@@ -17,7 +18,7 @@ export default function StockEvaluatorView() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/stock-risk?ticker=${encodeURIComponent(sym)}`);
+      const res = await fetch(getApiUrl(`/api/stock-risk?ticker=${encodeURIComponent(sym)}`));
       if (!res.ok) throw new Error("Failed to evaluate stock data.");
       const data = await res.json();
       setStockData(data);
