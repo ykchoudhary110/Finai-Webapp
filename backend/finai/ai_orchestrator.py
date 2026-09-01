@@ -56,8 +56,9 @@ def _extract_monetary_amounts(text: str) -> list[float]:
 
 
 def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | None:
-    """Call Google Gemini 1.5 Flash via REST endpoint."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    """Call Google Gemini via REST endpoint (supports gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash)."""
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     payload = {
         "contents": [
             {

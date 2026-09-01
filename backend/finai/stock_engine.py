@@ -95,7 +95,8 @@ def _resolve_with_gemini(query: str) -> str | None:
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         return None
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     prompt = (
         f"Identify the official National Stock Exchange of India (NSE) ticker symbol for the query: '{query}'. "
         f"Examples: 'mama earth' -> HONASA, 'zomto' -> ZOMATO, 'tata motor' -> TATAMOTORS, 'paytm' -> PAYTM. "

@@ -47,11 +47,12 @@ class CalculateRequest(BaseModel):
 def get_system_status() -> dict[str, Any]:
     """Health check endpoint showing AI API and Market Feed connectivity."""
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
     return {
         "status": "online",
         "gemini_api": {
             "online": bool(gemini_key),
-            "model": "gemini-1.5-flash",
+            "model": model_name,
             "mode": "Live Cloud AI" if gemini_key else "Deterministic High-Fidelity Synthesis",
         },
         "market_data": {

@@ -15,6 +15,14 @@ export default function TopBar({ activeTab, onOpenAudit, systemStatus }) {
     }
   };
 
+  const formatModelName = (name) => {
+    if (!name) return 'Gemini 1.5 Flash';
+    if (name.includes('1.5-pro')) return 'Gemini 1.5 Pro';
+    if (name.includes('2.0-flash')) return 'Gemini 2.0 Flash';
+    if (name.includes('1.5-flash')) return 'Gemini 1.5 Flash';
+    return name;
+  };
+
   const isGeminiOnline = systemStatus?.gemini_api?.online ?? false;
 
   return (
@@ -34,7 +42,7 @@ export default function TopBar({ activeTab, onOpenAudit, systemStatus }) {
             <span className={`relative inline-flex rounded-full h-2 w-2 ${isGeminiOnline ? 'bg-[#22C55E]' : 'bg-[#5B5FEF]'}`} />
           </span>
           <span className="text-[#A6ADBB]">
-            {isGeminiOnline ? 'Gemini 1.5 Flash: Online' : 'AI Engine: Active'}
+            {isGeminiOnline ? `${formatModelName(systemStatus?.gemini_api?.model)}: Online` : 'AI Engine: Active'}
           </span>
         </div>
 
