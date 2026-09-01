@@ -13,11 +13,45 @@ SEBI_DISCLAIMER = (
 )
 
 
+COMMON_ALIASES = {
+    "HDFC BANK": "HDFCBANK",
+    "HDFC": "HDFCBANK",
+    "SBI": "SBIN",
+    "STATE BANK OF INDIA": "SBIN",
+    "STATE BANK": "SBIN",
+    "TATA MOTORS": "TATAMOTORS",
+    "ICICI BANK": "ICICIBANK",
+    "ICICI": "ICICIBANK",
+    "KOTAK BANK": "KOTAKBANK",
+    "KOTAK": "KOTAKBANK",
+    "AXIS BANK": "AXISBANK",
+    "AXIS": "AXISBANK",
+    "BAJAJ FINANCE": "BAJFINANCE",
+    "BAJAJ FINSERV": "BAJAJFINSV",
+    "L&T": "LT",
+    "LARSEN": "LT",
+    "LARSEN & TOUBRO": "LT",
+    "AIRTEL": "BHARTIARTL",
+    "BHARTI AIRTEL": "BHARTIARTL",
+    "INFOSYS": "INFY",
+    "MARUTI SUZUKI": "MARUTI",
+    "ASIAN PAINTS": "ASIANPAINT",
+    "SUN PHARMA": "SUNPHARMA",
+    "HCL TECH": "HCLTECH",
+    "ITC": "ITC",
+}
+
+
 def _normalize_ticker(ticker: str) -> str:
-    t = ticker.strip().upper()
-    if not t.endswith(".NS") and not t.endswith(".BO"):
-        return f"{t}.NS"
-    return t
+    cleaned = ticker.strip().upper()
+    # Check alias map
+    if cleaned in COMMON_ALIASES:
+        cleaned = COMMON_ALIASES[cleaned]
+    # Remove interior spaces (e.g. "HDFC  BANK" -> "HDFCBANK")
+    cleaned = cleaned.replace(" ", "")
+    if not cleaned.endswith(".NS") and not cleaned.endswith(".BO"):
+        return f"{cleaned}.NS"
+    return cleaned
 
 
 def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
@@ -27,15 +61,32 @@ def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
     Strictly educational and quantitative — zero Buy/Sell recommendations.
     """
     symbol = _normalize_ticker(ticker_input)
+    info = {}
+    fast_info = None
     try:
         stock = yf.Ticker(symbol)
-        info = stock.info or {}
+        try:
+            info = stock.info or {}
+        except Exception:
+            info = {}
+        try:
+            fast_info = stock.fast_info
+        except Exception:
+            fast_info = None
     except Exception as e:
         logger.warning(f"Error fetching ticker {symbol}: {e}")
-        info = {}
 
-    company_name = info.get("shortName") or info.get("longName") or symbol.replace(".NS", "")
-    current_price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+    company_name = (
+        info.get("shortName")
+        or info.get("longName")
+        or (symbol.replace(".NS", "").replace(".BO", ""))
+    )
+    current_price = (
+        info.get("currentPrice")
+        or info.get("regularMarketPrice")
+        or (getattr(fast_info, "last_price", None) if fast_info else None)
+        or 0.0
+    )
     currency = info.get("currency", "INR")
     sector = info.get("sector", "Diversified")
     industry = info.get("industry", "General")
