@@ -52,7 +52,7 @@ def get_system_status() -> dict[str, Any]:
     """Health check endpoint showing AI API, Search Grounding, and Market Feed connectivity."""
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model_name = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash").strip()
     has_cloud_ai = bool(gemini_key or groq_key)
     return {
         "status": "online",

@@ -57,13 +57,13 @@ def _extract_monetary_amounts(text: str) -> list[float]:
 
 def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | None:
     """Call Google Gemini via REST endpoint with online search grounding and automatic model fallback."""
-    configured_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    configured_model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash").strip()
     candidate_models = [
+        "gemini-3.6-flash",
         configured_model,
+        "gemini-3.5-flash",
         "gemini-2.5-flash",
         "gemini-flash-latest",
-        "gemini-2.5-pro",
-        "gemini-3.6-flash",
     ]
     seen = set()
     models = [m for m in candidate_models if not (m in seen or seen.add(m))]
