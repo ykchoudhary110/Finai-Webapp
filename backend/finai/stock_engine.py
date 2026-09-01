@@ -27,7 +27,11 @@ COMMON_ALIASES = {
     "HDFCBANK": "HDFCBANK",
     "ICICIBANK": "ICICIBANK",
     "SBIN": "SBIN",
-    "ZOMATO": "ZOMATO",
+    "ZOMATO": "ETERNAL",
+    "ZOMTO": "ETERNAL",
+    "ZOMOTO": "ETERNAL",
+    "BLINKIT": "ETERNAL",
+    "ETERNAL": "ETERNAL",
     "TATAMOTORS": "TATAMOTORS",
     "TATA STEEL": "TATASTEEL",
     "TATASTEEL": "TATASTEEL",
@@ -250,6 +254,8 @@ def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
         or info.get("longName")
         or (symbol.replace(".NS", "").replace(".BO", ""))
     )
+    if "ETERNAL" in symbol:
+        company_name = "ETERNAL LIMITED (Zomato & Blinkit)"
     currency = info.get("currency", "INR")
     sector = info.get("sector", "Diversified")
     industry = info.get("industry", "General")
