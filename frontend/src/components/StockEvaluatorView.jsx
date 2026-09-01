@@ -9,7 +9,7 @@ export default function StockEvaluatorView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const quickTickers = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ZOMATO', 'TATAMOTORS'];
+  const quickTickers = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ZOMATO', 'MAMAEARTH', 'PAYTM'];
 
   const handleEvaluate = async (symbolToFetch) => {
     const sym = symbolToFetch || tickerInput;

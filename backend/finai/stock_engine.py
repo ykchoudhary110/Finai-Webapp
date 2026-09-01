@@ -39,6 +39,22 @@ COMMON_ALIASES = {
     "SUN PHARMA": "SUNPHARMA",
     "HCL TECH": "HCLTECH",
     "ITC": "ITC",
+    "MAMAEARTH": "HONASA",
+    "HONASA": "HONASA",
+    "HONASA CONSUMER": "HONASA",
+    "PAYTM": "PAYTM",
+    "ONE97": "PAYTM",
+    "NYKAA": "NYKAA",
+    "FSN": "NYKAA",
+    "DMART": "DMART",
+    "AVENUE SUPERMARTS": "DMART",
+    "INDIGO": "INDIGO",
+    "INTERGLOBE": "INDIGO",
+    "JIO": "JIOFIN",
+    "JIO FINANCIAL": "JIOFIN",
+    "OLA": "OLAELEC",
+    "OLA ELECTRIC": "OLAELEC",
+    "SWIGGY": "SWIGGY",
 }
 
 
