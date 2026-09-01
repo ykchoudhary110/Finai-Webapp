@@ -36,6 +36,7 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=2, description="User question or financial scenario")
+    mode: str = Field(default="auto", description="auto | salary | gst")
 
 
 class CalculateRequest(BaseModel):
@@ -75,11 +76,11 @@ def handle_chat(req: ChatRequest) -> dict[str, Any]:
     Logs transaction to cryptographic SHA-256 audit ledger.
     """
     try:
-        response = orchestrate_ca_consultation(req.query)
+        response = orchestrate_ca_consultation(req.query, mode=req.mode)
         # Save to audit ledger
         audit_record = save_record(
             kind="ca_consultation",
-            user_input={"query": req.query},
+            user_input={"query": req.query, "mode": req.mode},
             result={
                 "has_math": bool(response.get("tax_comparison_card") or response.get("verified_math_card")),
                 "citations_count": len(response.get("citations", [])),

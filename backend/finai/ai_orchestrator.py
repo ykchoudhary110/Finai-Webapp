@@ -143,7 +143,7 @@ def _call_groq_api(prompt: str, search_context: str, api_key: str) -> str | None
     return None
 
 
-def orchestrate_ca_consultation(user_query: str) -> dict[str, Any]:
+def orchestrate_ca_consultation(user_query: str, mode: str = "auto") -> dict[str, Any]:
     """
     Main neuro-symbolic agent orchestrator:
     1. Fetches live statutory context via web search.
@@ -166,35 +166,48 @@ def orchestrate_ca_consultation(user_query: str) -> dict[str, Any]:
     tax_comparison_card = None
     q_lower = user_query.lower()
 
-    # Explicit Salary / Employment check (handles typos: 'salery', 'salary', 'job', 'company', 'ctc', 'package')
-    is_salary_or_employment = bool(re.search(
-        r"\b(salery|salary|salaries|salaried|job|employed|employee|employment|ctc|annually|annual\s+income|per\s+annum|per\s+month|package|form\s*16|working\s+on\s+a\s+company|working\s+in\s+a\s+company|company\s+adn\s+got|company\s+and\s+got)\b",
-        q_lower
-    ))
+    if mode == "salary":
+        is_salary_or_employment = True
+        is_gst = False
+        is_income_tax = True
+        is_presumptive = False
+        is_capital_gains = False
+    elif mode == "gst":
+        is_salary_or_employment = False
+        is_gst = True
+        is_income_tax = False
+        is_presumptive = False
+        is_capital_gains = False
+    else:
+        # Explicit Salary / Employment check (handles typos: 'salery', 'salary', 'job', 'company', 'ctc', 'package')
+        is_salary_or_employment = bool(re.search(
+            r"\b(salery|salary|salaries|salaried|job|employed|employee|employment|ctc|annually|annual\s+income|per\s+annum|per\s+month|package|form\s*16|working\s+on\s+a\s+company|working\s+in\s+a\s+company|company\s+adn\s+got|company\s+and\s+got)\b",
+            q_lower
+        ))
 
-    # Check for GST transaction intent (strict word boundaries to prevent 'sale' inside 'salery')
-    is_gst = not is_salary_or_employment and bool(re.search(
-        r"\b(gst|sales|sale|purchase|purchased|invoice|invoicing|hsn|sac|interstate|igst|cgst|sgst|itc)\b",
-        q_lower
-    ))
+        # Check for GST transaction intent (strict word boundaries to prevent 'sale' inside 'salery')
+        is_gst = not is_salary_or_employment and bool(re.search(
+            r"\b(gst|sales|sale|purchase|purchased|invoice|invoicing|hsn|sac|interstate|igst|cgst|sgst|itc)\b",
+            q_lower
+        ))
 
-    # Check for Capital Gains intent
-    is_capital_gains = bool(re.search(
-        r"\b(capital\s+gain|capital\s+gains|stcg|ltcg|mutual\s+fund|mutual\s+funds|shares|equity|stocks)\b",
-        q_lower
-    ))
+        # Check for Capital Gains intent
+        is_capital_gains = bool(re.search(
+            r"\b(capital\s+gain|capital\s+gains|stcg|ltcg|mutual\s+fund|mutual\s+funds|shares|equity|stocks)\b",
+            q_lower
+        ))
 
-    # Check for Freelancer / Presumptive intent
-    is_presumptive = not is_salary_or_employment and bool(re.search(
-        r"\b(freelancer|freelance|consultant|consulting|44ada|44ad|turnover|contractor)\b",
-        q_lower
-    ))
+        # Check for Freelancer / Presumptive intent
+        is_presumptive = not is_salary_or_employment and bool(re.search(
+            r"\b(freelancer|freelance|consultant|consulting|44ada|44ad|turnover|contractor)\b",
+            q_lower
+        ))
 
-    # Check for Personal Income Tax intent
-    is_income_tax = is_salary_or_employment or bool(re.search(
-        r"\b(income\s+tax|tax\s+regime|regime|deduction|80c|80d|hra|115bac|slab|slabs|tax\s+saving|old\s+regime|new\s+regime)\b",
-        q_lower
-    ))
+        # Check for Personal Income Tax intent
+        is_income_tax = is_salary_or_employment or bool(re.search(
+            r"\b(income\s+tax|tax\s+regime|regime|deduction|80c|80d|hra|115bac|slab|slabs|tax\s+saving|old\s+regime|new\s+regime)\b",
+            q_lower
+        ))
 
     # Execute math when amounts exist
     if primary_amount:

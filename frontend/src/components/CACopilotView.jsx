@@ -11,6 +11,7 @@ export default function CACopilotView() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedTraceId, setExpandedTraceId] = useState(null);
+  const [mode, setMode] = useState('auto'); // 'auto' | 'salary' | 'gst'
 
   const presetChips = [
     { label: "💼 ₹45L Freelancer US Export & 44ADA", query: "I earned ₹45 Lakhs this year providing remote software engineering services to a US client. What are my GST LUT export rules, Section 44ADA presumptive tax, and advance tax liabilities?" },
@@ -23,7 +24,7 @@ export default function CACopilotView() {
     const q = textToSend || query;
     if (!q.trim() || loading) return;
 
-    const userMsg = { id: Date.now(), role: 'user', content: q };
+    const userMsg = { id: Date.now(), role: 'user', content: q, mode: mode };
     setMessages((prev) => [...prev, userMsg]);
     setQuery('');
     setLoading(true);
@@ -32,7 +33,7 @@ export default function CACopilotView() {
       const res = await fetch(getApiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q }),
+        body: JSON.stringify({ query: q, mode: mode }),
       });
       const data = await res.json();
 
@@ -194,7 +195,58 @@ export default function CACopilotView() {
       </div>
 
       {/* Persistent Bottom Chat Input Bar */}
-      <div className="py-4 border-t border-[#232732] bg-[#0B0E14]">
+      <div className="py-3 border-t border-[#232732] bg-[#0B0E14] space-y-2">
+        {/* Mode Selector Pill Buttons */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5 text-xs font-mono">
+            <span className="text-[#6B7280]">Target Calculator:</span>
+            <div className="inline-flex p-0.5 rounded-lg bg-[#12151C] border border-[#232732]">
+              <button
+                type="button"
+                onClick={() => setMode('auto')}
+                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 font-medium text-[11px] ${
+                  mode === 'auto'
+                    ? 'bg-[#5B5FEF] text-white shadow'
+                    : 'text-[#A6ADBB] hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Auto-Detect</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode('salary')}
+                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 font-medium text-[11px] ${
+                  mode === 'salary'
+                    ? 'bg-[#22C55E] text-white shadow'
+                    : 'text-[#A6ADBB] hover:text-white'
+                }`}
+              >
+                <span>💼 Salary & Income Tax</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode('gst')}
+                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 font-medium text-[11px] ${
+                  mode === 'gst'
+                    ? 'bg-[#F59E0B] text-black shadow'
+                    : 'text-[#A6ADBB] hover:text-white'
+                }`}
+              >
+                <span>🧾 GST Invoicing</span>
+              </button>
+            </div>
+          </div>
+
+          <span className="text-[10px] font-mono text-[#6B7280] hidden sm:inline">
+            {mode === 'salary' && '🔒 Locked: Salary Income Tax (Strictly Exempt from GST)'}
+            {mode === 'gst' && '🔒 Locked: GST Commercial Invoice & ITC'}
+            {mode === 'auto' && '⚡ Smart AI Auto-Classification'}
+          </span>
+        </div>
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -206,7 +258,13 @@ export default function CACopilotView() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ask about GST classification, Section 44ADA, Old vs New regime, capital gains..."
+            placeholder={
+              mode === 'salary'
+                ? "Enter your annual salary or CTC (e.g. 15 Lakhs) for Old vs New Regime calculation..."
+                : mode === 'gst'
+                ? "Enter commercial transaction (e.g. bought office laptops for ₹1.8 Lakhs) for GST & ITC..."
+                : "Ask about Salary, GST, Section 44ADA, Old vs New regime, capital gains..."
+            }
             className="w-full pl-4 pr-12 py-3 rounded-xl bg-[#12151C] border border-[#232732] text-sm text-[#F5F6FA] placeholder-[#6B7280] focus:outline-none focus:border-[#5B5FEF] focus:ring-1 focus:ring-[#5B5FEF] transition-all"
           />
           <button
