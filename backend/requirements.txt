@@ -1,0 +1,9 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.8.0
+yfinance>=0.2.40
+duckduckgo-search>=6.2.0
+google-genai>=0.1.1
+pandas>=2.2.0
+requests>=2.32.0
+python-dotenv>=1.0.0
