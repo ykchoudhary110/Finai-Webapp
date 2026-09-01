@@ -1,0 +1,22 @@
+name: Keep Render Backend Alive
+
+on:
+  schedule:
+    # Ping every 10 minutes to prevent Render free instance from sleeping
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend
+        run: |
+          echo "Pinging FinAI Backend on Render to maintain 24/7 uptime..."
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://finai-backend-kapn.onrender.com/api/status)
+          echo "Render Backend responded with HTTP status: $STATUS_CODE"
+          if [ "$STATUS_CODE" -eq 200 ]; then
+            echo "✅ Backend is healthy and awake!"
+          else
+            echo "⚠️ Non-200 status received: $STATUS_CODE"
+          fi
