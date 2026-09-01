@@ -93,6 +93,15 @@ export default function StockEvaluatorView() {
         </div>
       </div>
 
+      {stockData && stockData.auto_corrected && (
+        <div className="p-3 rounded-xl bg-[#5B5FEF]/10 border border-[#5B5FEF]/30 text-xs text-[#7477F5] flex items-center gap-2">
+          <span>💡</span>
+          <span>
+            Auto-corrected spelling from <strong className="text-white font-mono">"{stockData.original_query}"</strong> to <strong className="text-white font-mono">{stockData.company_name} ({stockData.symbol})</strong>
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="p-4 rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/30 text-xs text-[#EF4444]">
           {error}

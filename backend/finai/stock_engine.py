@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import difflib
+import json
 import logging
+import os
+import re
+import urllib.request
 from typing import Any
 import yfinance as yf
 
@@ -14,6 +19,48 @@ SEBI_DISCLAIMER = (
 
 
 COMMON_ALIASES = {
+    "RELIANCE": "RELIANCE",
+    "TCS": "TCS",
+    "INFY": "INFY",
+    "INFOSYS": "INFY",
+    "WIPRO": "WIPRO",
+    "HDFCBANK": "HDFCBANK",
+    "ICICIBANK": "ICICIBANK",
+    "SBIN": "SBIN",
+    "ZOMATO": "ZOMATO",
+    "TATAMOTORS": "TATAMOTORS",
+    "TATA STEEL": "TATASTEEL",
+    "TATASTEEL": "TATASTEEL",
+    "TITAN": "TITAN",
+    "ADANI": "ADANIENT",
+    "ADANI ENTERPRISES": "ADANIENT",
+    "ADANIENT": "ADANIENT",
+    "ADANIPORTS": "ADANIPORTS",
+    "HUL": "HINDUNILVR",
+    "HINDUSTAN UNILEVER": "HINDUNILVR",
+    "HINDUNILVR": "HINDUNILVR",
+    "ITC": "ITC",
+    "BHARTIARTL": "BHARTIARTL",
+    "AIRTEL": "BHARTIARTL",
+    "BHARTI AIRTEL": "BHARTIARTL",
+    "MAMAEARTH": "HONASA",
+    "HONASA": "HONASA",
+    "HONASA CONSUMER": "HONASA",
+    "PAYTM": "PAYTM",
+    "ONE97": "PAYTM",
+    "NYKAA": "NYKAA",
+    "FSN": "NYKAA",
+    "DMART": "DMART",
+    "AVENUE SUPERMARTS": "DMART",
+    "INDIGO": "INDIGO",
+    "INTERGLOBE": "INDIGO",
+    "JIO": "JIOFIN",
+    "JIO FINANCIAL": "JIOFIN",
+    "JIOFIN": "JIOFIN",
+    "OLA": "OLAELEC",
+    "OLA ELECTRIC": "OLAELEC",
+    "OLAELEC": "OLAELEC",
+    "SWIGGY": "SWIGGY",
     "HDFC BANK": "HDFCBANK",
     "HDFC": "HDFCBANK",
     "SBI": "SBIN",
@@ -29,45 +76,86 @@ COMMON_ALIASES = {
     "BAJAJ FINANCE": "BAJFINANCE",
     "BAJAJ FINSERV": "BAJAJFINSV",
     "L&T": "LT",
+    "LT": "LT",
     "LARSEN": "LT",
     "LARSEN & TOUBRO": "LT",
-    "AIRTEL": "BHARTIARTL",
-    "BHARTI AIRTEL": "BHARTIARTL",
-    "INFOSYS": "INFY",
+    "MARUTI": "MARUTI",
     "MARUTI SUZUKI": "MARUTI",
     "ASIAN PAINTS": "ASIANPAINT",
+    "ASIANPAINT": "ASIANPAINT",
     "SUN PHARMA": "SUNPHARMA",
+    "SUNPHARMA": "SUNPHARMA",
     "HCL TECH": "HCLTECH",
-    "ITC": "ITC",
-    "MAMAEARTH": "HONASA",
-    "HONASA": "HONASA",
-    "HONASA CONSUMER": "HONASA",
-    "PAYTM": "PAYTM",
-    "ONE97": "PAYTM",
-    "NYKAA": "NYKAA",
-    "FSN": "NYKAA",
-    "DMART": "DMART",
-    "AVENUE SUPERMARTS": "DMART",
-    "INDIGO": "INDIGO",
-    "INTERGLOBE": "INDIGO",
-    "JIO": "JIOFIN",
-    "JIO FINANCIAL": "JIOFIN",
-    "OLA": "OLAELEC",
-    "OLA ELECTRIC": "OLAELEC",
-    "SWIGGY": "SWIGGY",
+    "HCLTECH": "HCLTECH",
 }
 
 
-def _normalize_ticker(ticker: str) -> str:
+def _resolve_with_gemini(query: str) -> str | None:
+    """Use Gemini Flash to identify the official NSE ticker symbol for typos or brand names."""
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return None
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    prompt = (
+        f"Identify the official National Stock Exchange of India (NSE) ticker symbol for the query: '{query}'. "
+        f"Examples: 'mama earth' -> HONASA, 'zomto' -> ZOMATO, 'tata motor' -> TATAMOTORS, 'paytm' -> PAYTM. "
+        f"Respond with strictly ONLY the exact ticker uppercase letters without .NS and without punctuation. "
+        f"If not found, respond with NONE."
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 10},
+    }
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            candidates = data.get("candidates", [])
+            if candidates:
+                res_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip().upper()
+                res_text = re.sub(r"[^A-Z0-9]", "", res_text)
+                if res_text and res_text != "NONE" and len(res_text) <= 15:
+                    return res_text
+    except Exception as e:
+        logger.warning(f"Gemini ticker resolution error: {e}")
+    return None
+
+
+def _normalize_ticker(ticker: str) -> tuple[str, bool]:
+    """Return normalized ticker (e.g. RELIANCE.NS) and whether fuzzy auto-correction was applied."""
     cleaned = ticker.strip().upper()
-    # Check alias map
+    auto_corrected = False
+
+    # Check exact alias map
     if cleaned in COMMON_ALIASES:
         cleaned = COMMON_ALIASES[cleaned]
+    else:
+        # Check fuzzy close matches (handles 'mamaerth', 'zomto', 'relaince')
+        matches = difflib.get_close_matches(cleaned, COMMON_ALIASES.keys(), n=1, cutoff=0.6)
+        if matches:
+            cleaned = COMMON_ALIASES[matches[0]]
+            auto_corrected = True
+
     # Remove interior spaces (e.g. "HDFC  BANK" -> "HDFCBANK")
     cleaned = cleaned.replace(" ", "")
     if not cleaned.endswith(".NS") and not cleaned.endswith(".BO"):
-        return f"{cleaned}.NS"
-    return cleaned
+        return f"{cleaned}.NS", auto_corrected
+    return cleaned, auto_corrected
+
+
+def _safe_attr(obj: Any, attr: str, default: Any = None) -> Any:
+    if obj is None:
+        return default
+    try:
+        val = getattr(obj, attr, default)
+        return val if val is not None else default
+    except Exception:
+        return default
 
 
 def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
@@ -76,7 +164,7 @@ def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
     for an Indian stock ticker via Yahoo Finance.
     Strictly educational and quantitative — zero Buy/Sell recommendations.
     """
-    symbol = _normalize_ticker(ticker_input)
+    symbol, was_auto_corrected = _normalize_ticker(ticker_input)
     info = {}
     fast_info = None
     try:
@@ -92,16 +180,33 @@ def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
     except Exception as e:
         logger.warning(f"Error fetching ticker {symbol}: {e}")
 
+    # If initial lookup failed or returned no price, attempt AI resolution
+    current_price = (
+        info.get("currentPrice")
+        or info.get("regularMarketPrice")
+        or _safe_attr(fast_info, "last_price", 0.0)
+        or 0.0
+    )
+
+    if current_price == 0.0 or not info.get("shortName"):
+        ai_symbol = _resolve_with_gemini(ticker_input)
+        if ai_symbol and f"{ai_symbol}.NS" != symbol:
+            try:
+                ai_stock = yf.Ticker(f"{ai_symbol}.NS")
+                ai_info = ai_stock.info or {}
+                if ai_info.get("shortName") or ai_info.get("currentPrice"):
+                    symbol = f"{ai_symbol}.NS"
+                    info = ai_info
+                    fast_info = getattr(ai_stock, "fast_info", None)
+                    current_price = info.get("currentPrice") or info.get("regularMarketPrice") or _safe_attr(fast_info, "last_price", 0.0) or 0.0
+                    was_auto_corrected = True
+            except Exception:
+                pass
+
     company_name = (
         info.get("shortName")
         or info.get("longName")
         or (symbol.replace(".NS", "").replace(".BO", ""))
-    )
-    current_price = (
-        info.get("currentPrice")
-        or info.get("regularMarketPrice")
-        or (getattr(fast_info, "last_price", None) if fast_info else None)
-        or 0.0
     )
     currency = info.get("currency", "INR")
     sector = info.get("sector", "Diversified")
@@ -278,5 +383,7 @@ def evaluate_stock_risk(ticker_input: str) -> dict[str, Any]:
         },
         "green_flags": green_flags,
         "red_flags": red_flags,
+        "auto_corrected": was_auto_corrected,
+        "original_query": ticker_input,
         "sebi_disclaimer": SEBI_DISCLAIMER,
     }
