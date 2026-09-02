@@ -91,7 +91,7 @@ def test_gemini_debug() -> dict[str, Any]:
     """Diagnostic endpoint to verify Gemini API connectivity on Render."""
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     results = {}
-    for m in ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-3.6-flash"]:
+    for m in ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.6-flash"]:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
         payload = {"contents": [{"parts": [{"text": "Say OK"}]}]}
         try:

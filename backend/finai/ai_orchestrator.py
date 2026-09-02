@@ -87,9 +87,9 @@ def _call_gemini_rest(prompt: str, search_context: str, api_key: str) -> str | N
     candidate_models = [
         "gemini-3.6-flash",
         configured_model,
-        "gemini-3.5-flash",
-        "gemini-2.5-flash",
         "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+        "gemini-3-flash-preview",
     ]
     seen = set()
     models = [m for m in candidate_models if not (m in seen or seen.add(m))]
@@ -368,35 +368,129 @@ def orchestrate_ca_consultation(user_query: str, mode: str = "auto", history: li
                 "computed_by": "RuleEngine:Sec44ADA_Presumptive",
             }
         elif is_gst:
+            # 1. Extract explicit rate from query if provided by user (e.g. "with 5 % gst", "18% gst", "12 percent")
+            explicit_rate_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|\s*percent)\s*(?:gst|tax|rate)?", q_lower)
+            user_explicit_rate = float(explicit_rate_match.group(1)) if explicit_rate_match else None
+
+            # 2. Check for catalog candidates
             candidates = find_candidates(user_query)
-            selected_item = candidates[0] if candidates else {
-                "code": "998313", "kind": "SAC", "name": "IT & Software Consulting", "rate": 18.0, "itc": True,
-                "source": "Notification No. 11/2017-Central Tax (Rate)",
-            }
+            selected_item = candidates[0] if candidates else None
+
+            # 3. Detect Inward Supply (Purchase) vs Outward Supply (Sale)
+            is_purchase = bool(re.search(r"\b(bough|bought|buy|buying|purchase|purchased|inward|expense|acquired|paid\s+gst|machine|machinery|factory)\b", q_lower)) and not bool(re.search(r"\b(made\s+a\s+sale|sold|sale\s+of|outward)\b", q_lower))
+            is_sale = bool(re.search(r"\b(sale|sales|sold|outward|turnover|invoice\s+issued|selling)\b", q_lower))
+            is_capital_goods = bool(re.search(r"\b(machine|machinery|equipment|factory|plant|tools|capital\s*goods)\b", q_lower))
+
+            # Determine rate
+            if user_explicit_rate is not None:
+                final_rate = user_explicit_rate
+            elif selected_item:
+                final_rate = selected_item["rate"]
+            elif is_capital_goods:
+                final_rate = 18.0
+            else:
+                final_rate = 18.0
+
+            # Determine classification name & code
+            if is_capital_goods:
+                tariff_code = "HSN 8479"
+                item_name = "Capital Goods (Industrial Machinery & Factory Equipment)"
+            elif selected_item:
+                tariff_code = f"{selected_item['kind']} {selected_item['code']}"
+                item_name = selected_item["name"]
+            else:
+                tariff_code = f"HSN/SAC {final_rate:.0f}% Slab"
+                item_name = f"Commercial Goods/Services ({final_rate:.0f}% Slab)"
+
             is_interstate = any(k in q_lower for k in ("interstate", "igst", "mumbai", "delhi", "bangalore", "outside state"))
-            gst_res = gst(primary_amount, selected_item["rate"], is_interstate)
+            gst_res = gst(primary_amount, final_rate, is_interstate)
 
-            bc_res = blocked_credit_17_5(user_query)
+            # Check for prior Inward ITC from conversation history
+            prior_itc_amount = 0.0
+            if history:
+                for h in history:
+                    h_text = (h.get("content") or "").lower()
+                    if any(w in h_text for w in ("machine", "machinery", "factory", "bough", "bought", "purchase", "purchased")):
+                        h_amounts = _extract_monetary_amounts(h_text)
+                        h_rate_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|\s*percent)", h_text)
+                        h_rate = float(h_rate_match.group(1)) if h_rate_match else 18.0
+                        if h_amounts:
+                            pur_val = h_amounts[0]
+                            prior_itc_amount = round(pur_val * h_rate / 100.0, 2)
+                            break
 
-            verified_math_card = {
-                "type": "gst_computation",
-                "title": f"GST Invoicing Assessment — {selected_item['name']}",
-                "taxable_value": primary_amount,
-                "gst_amount": gst_res["gst_amount"],
-                "invoice_total": gst_res["invoice_total"],
-                "rate": selected_item["rate"],
-                "hsn_sac": selected_item["code"],
-                "itc_status": "Blocked under " + bc_res["section"] if bc_res["is_blocked"] else "Eligible under Section 16",
-                "details": [
-                    {"label": "Tariff Code", "value": f"{selected_item['kind']} {selected_item['code']}"},
-                    {"label": "Statutory Rate", "value": f"{selected_item['rate']}% ({gst_res['treatment']})"},
-                    {"label": "Taxable Value", "value": f"₹{primary_amount:,.2f}"},
-                    {"label": "GST Amount", "value": f"₹{gst_res['gst_amount']:,.2f}"},
-                    {"label": "Total Invoiced Amount", "value": f"₹{gst_res['invoice_total']:,.2f}"},
-                    {"label": "Input Tax Credit (ITC)", "value": bc_res["reason"]},
-                ],
-                "computed_by": "RuleEngine:GST_Deterministic",
-            }
+            if is_sale and (prior_itc_amount > 0 or "input" in q_lower):
+                # Sale with ITC Set-Off scenario
+                output_gst = gst_res["gst_amount"]
+                itc_claimed = min(output_gst, prior_itc_amount) if prior_itc_amount > 0 else 90000.0
+                net_cash_payable = max(0.0, output_gst - itc_claimed)
+
+                verified_math_card = {
+                    "type": "gst_reconciliation",
+                    "title": "GST Return Filing & Input Tax Credit Set-Off (GSTR-3B)",
+                    "taxable_value": primary_amount,
+                    "output_gst": output_gst,
+                    "itc_available": itc_claimed,
+                    "net_cash_payable": net_cash_payable,
+                    "rate": final_rate,
+                    "details": [
+                        {"label": "Gross Outward Supplies (Sale Turnover)", "value": f"₹{primary_amount:,.2f}"},
+                        {"label": f"Output GST Liability ({final_rate}% {gst_res['treatment']})", "value": f"₹{output_gst:,.2f}"},
+                        {"label": "Less: Input Tax Credit (Machine Purchase)", "value": f"−₹{itc_claimed:,.2f}"},
+                        {"label": "Net Cash Tax Payable via PMT-06 (GSTR-3B)", "value": f"₹{net_cash_payable:,.2f}"},
+                        {"label": "Net Cash Saved via ITC Offset", "value": f"₹{itc_claimed:,.2f}"},
+                        {"label": "GSTR-1 Outward Supply Deadline", "value": "11th of next month (gst.gov.in)"},
+                        {"label": "GSTR-3B Tax Payment Deadline", "value": "20th of next month (gst.gov.in)"},
+                        {"label": "Rule 86B Compliance", "value": "Compliant (Cash paid exceeds 1% threshold)"},
+                    ],
+                    "computed_by": "RuleEngine:GST_ITC_Reconciliation",
+                }
+            elif is_purchase or is_capital_goods:
+                # Inward Purchase / Machinery
+                bc_res = blocked_credit_17_5(user_query)
+                itc_status = "100% Eligible under Section 16 & Section 18 (Capital Goods)" if not bc_res["is_blocked"] else "Blocked under " + bc_res["section"]
+                verified_math_card = {
+                    "type": "gst_computation",
+                    "title": f"GST Inward Purchase & Capital Goods ITC — {item_name}",
+                    "taxable_value": primary_amount,
+                    "gst_amount": gst_res["gst_amount"],
+                    "invoice_total": gst_res["invoice_total"],
+                    "rate": final_rate,
+                    "hsn_sac": tariff_code,
+                    "itc_status": itc_status,
+                    "details": [
+                        {"label": "Classification", "value": f"{tariff_code} — {item_name}"},
+                        {"label": "Statutory Rate", "value": f"{final_rate}% ({gst_res['treatment']})"},
+                        {"label": "Taxable Value (Purchase Cost)", "value": f"₹{primary_amount:,.2f}"},
+                        {"label": "Input GST Paid to Supplier", "value": f"₹{gst_res['gst_amount']:,.2f}"},
+                        {"label": "Total Invoiced Amount Paid", "value": f"₹{gst_res['invoice_total']:,.2f}"},
+                        {"label": "Input Tax Credit (ITC) Available", "value": f"₹{gst_res['gst_amount']:,.2f} (Auto-drafted in GSTR-2B)"},
+                        {"label": "Section 16(3) Depreciation Rule", "value": f"Do NOT claim Section 32 Income Tax depreciation on ₹{gst_res['gst_amount']:,.2f} GST portion"},
+                    ],
+                    "computed_by": "RuleEngine:GST_CapitalGoods_ITC",
+                }
+            else:
+                # General Outward Sale
+                verified_math_card = {
+                    "type": "gst_computation",
+                    "title": f"GST Outward Invoicing Assessment — {item_name}",
+                    "taxable_value": primary_amount,
+                    "gst_amount": gst_res["gst_amount"],
+                    "invoice_total": gst_res["invoice_total"],
+                    "rate": final_rate,
+                    "hsn_sac": tariff_code,
+                    "itc_status": "Outward Taxable Supply (Output Tax Liability)",
+                    "details": [
+                        {"label": "Tariff Classification", "value": f"{tariff_code} — {item_name}"},
+                        {"label": "Statutory Rate", "value": f"{final_rate}% ({gst_res['treatment']})"},
+                        {"label": "Taxable Value (Sales Turnover)", "value": f"₹{primary_amount:,.2f}"},
+                        {"label": "Output GST Liability", "value": f"₹{gst_res['gst_amount']:,.2f}"},
+                        {"label": "Total Invoiced Amount", "value": f"₹{gst_res['invoice_total']:,.2f}"},
+                        {"label": "GSTR-1 Outward Return", "value": "Report in Table 4/5 by 11th of next month"},
+                        {"label": "GSTR-3B Tax Discharge", "value": "Report in Table 3.1(a) by 20th of next month"},
+                    ],
+                    "computed_by": "RuleEngine:GST_Deterministic",
+                }
 
     # Step 3: Format conversation history
     history_str = ""
@@ -521,15 +615,57 @@ def _generate_institutional_synthesis(
             "- **Books of Accounts Exemption**: No statutory obligation to maintain detailed day-to-day books of accounts or undergo a tax audit under Section 44AB (up to ₹75 Lakhs receipts).\n"
             "- **GST Registration Reminder**: If your aggregate annual turnover exceeds **₹20 Lakhs** (or ₹10 Lakhs in special category states), mandatory GST registration is triggered under Section 22 of the CGST Act."
         )
+    elif math_card and math_card.get("type") == "gst_reconciliation":
+        sections.append("### 🏛️ Professional CA Advisory: GST Return Filing & Input Tax Credit Set-Off")
+        sections.append(
+            f"Dear Client,\n\n"
+            f"Here is your step-by-step statutory roadmap for reconciling your **₹{math_card['taxable_value']:,.2f} Outward Sale ({math_card['rate']}% GST)** "
+            f"against the **Input Tax Credit (ITC)** from your factory machine purchase:\n\n"
+            f"#### 1. The Statutory Tax Math (What You Pay):\n"
+            f"- **Gross Output GST on Sale**: **₹{math_card['output_gst']:,.2f}** ({math_card['rate']}% liability).\n"
+            f"- **Less: Capital Goods ITC (Machine Purchase)**: **−₹{math_card['itc_available']:,.2f}** (Available in GSTR-2B).\n"
+            f"- **👉 NET CASH TAX YOU PAY (GSTR-3B)**: **₹{math_card['net_cash_payable']:,.2f}** via Electronic Cash Ledger.\n"
+            f"- **Direct Cash Saved via ITC Offset**: **₹{math_card['itc_available']:,.2f}**!\n\n"
+            f"#### 2. Step-by-Step Filing Roadmap on GST Portal (gst.gov.in):\n"
+            f"- **Step 1: File GSTR-1 (Outward Supplies)** by the **11th of the following month**.\n"
+            f"  - Report the ₹{math_card['taxable_value']:,.2f} sales invoice in Table 4 (B2B) or Table 5 (B2C Large) with {math_card['rate']}% tax rate (Output Tax: ₹{math_card['output_gst']:,.2f}).\n"
+            f"- **Step 2: Check GSTR-2B (Auto-Drafted ITC)** on the **14th of the month**.\n"
+            f"  - Verify that your machinery supplier uploaded their invoice so ₹{math_card['itc_available']:,.2f} appears in Table 4(A)(5) (Capital Goods / All Other ITC).\n"
+            f"- **Step 3: File GSTR-3B (Summary Return & Tax Payment)** by the **20th of the following month**.\n"
+            f"  - Table 3.1: Declare Outward Taxable Supplies of ₹{math_card['taxable_value']:,.2f} (Tax ₹{math_card['output_gst']:,.2f}).\n"
+            f"  - Table 4: Auto-drafted ITC of ₹{math_card['itc_available']:,.2f} will be claimed.\n"
+            f"  - Table 6.1: Electronic Credit Ledger automatically sets off ₹{math_card['itc_available']:,.2f} against the liability.\n"
+            f"  - Generate **Challan PMT-06** for the net balance **₹{math_card['net_cash_payable']:,.2f}**, pay via Net Banking, and click *Offset Liability & File with EVC/DSC*.\n\n"
+            f"#### 3. Statutory Capital Goods Rule (Section 16(3) CGST Act):\n"
+            f"- Since you are claiming ₹{math_card['itc_available']:,.2f} as Input Tax Credit, you **MUST NOT claim Income Tax depreciation under Section 32 on this GST amount**. Capitalize only the basic machine cost in your balance sheet.\n"
+            f"- **Rule 86B Compliance**: If monthly taxable turnover reaches ₹50 Lakhs, at least 1% of output tax must be paid in cash. Since you are paying ₹{math_card['net_cash_payable']:,.2f} in cash, you are 100% compliant!"
+        )
+    elif math_card and math_card.get("type") == "gst_computation" and "Capital Goods" in math_card.get("title", ""):
+        sections.append("### 🏭 Professional CA Advisory: Factory Machinery & Capital Goods ITC")
+        sections.append(
+            f"Dear Client,\n\n"
+            f"For the purchase of factory machinery worth **₹{math_card['taxable_value']:,.2f}** with **{math_card['rate']}% GST (₹{math_card['gst_amount']:,.2f})**:\n\n"
+            f"#### 1. Tariff Classification & Invoicing:\n"
+            f"- **Tariff Classification**: **{math_card['hsn_sac']}** (Capital Goods — Factory Plant & Machinery).\n"
+            f"- **Statutory GST Rate**: {math_card['rate']}% (CGST + SGST for intrastate, or IGST for interstate).\n"
+            f"- **Total Invoiced Amount**: ₹{math_card['invoice_total']:,.2f}.\n\n"
+            f"#### 2. How to Get Your Input Tax Credit (ITC):\n"
+            f"- **Section 16 & Section 18 CGST Act**: You are **100% eligible** to claim the entire **₹{math_card['gst_amount']:,.2f}** as Input Tax Credit in GSTR-3B in the month of purchase.\n"
+            f"- **GSTR-2B Auto-Population**: Ensure your machinery vendor files their GSTR-1 by the 11th so this invoice reflects in your GSTR-2B on the 14th under *Table 4(A)(5) (All Other ITC / Capital Goods)*.\n"
+            f"- **Utilization**: You can utilize this ₹{math_card['gst_amount']:,.2f} ITC to offset future output GST liability when you sell your manufactured products or goods!\n\n"
+            f"#### 3. Critical Statutory Restriction (Section 16(3) CGST Act):\n"
+            f"- Do **NOT** claim depreciation under Section 32 of the Income Tax Act on the ₹{math_card['gst_amount']:,.2f} GST component.\n"
+            f"- Capitalize the machinery at **₹{math_card['taxable_value']:,.2f}** (net of GST). If depreciation is claimed on the tax portion, the entire ITC will be disallowed and recovered with 18% interest under Section 50."
+        )
     elif math_card and math_card.get("type") == "gst_computation":
         sections.append(
-            f"This transaction is classified under **{math_card['hsn_sac']}** with statutory GST liability calculated at **{math_card['rate']}%**."
-        )
-        sections.append(
+            f"### 📋 Professional CA Advisory: GST Invoicing & Compliance ({math_card['hsn_sac']})\n\n"
+            f"This transaction is classified under **{math_card['hsn_sac']}** ({math_card['title'].split('—')[-1].strip()}) with statutory GST liability calculated at **{math_card['rate']}%**.\n\n"
             f"#### Invoicing & Compliance Note:\n"
+            f"- **Taxable Turnover**: ₹{math_card['taxable_value']:,.2f}.\n"
+            f"- **GST Liability**: ₹{math_card['gst_amount']:,.2f} (Total Invoice Value: ₹{math_card['invoice_total']:,.2f}).\n"
             f"- **Input Tax Credit**: {math_card['itc_status']}.\n"
-            f"- **Place of Supply**: Evaluated under Sections 10 and 12 of the IGST Act 2017 to determine whether CGST+SGST or IGST applies.\n"
-            f"- **Invoicing Total**: Taxable amount of ₹{math_card['taxable_value']:,.2f} + GST of ₹{math_card['gst_amount']:,.2f} = **₹{math_card['invoice_total']:,.2f}**."
+            f"- **Return Filing Deadlines**: Report in **GSTR-1** by the 11th of the following month, and discharge tax liability in **GSTR-3B** by the 20th of the following month."
         )
     else:
         sections.append(
