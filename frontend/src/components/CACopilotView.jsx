@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Send, Sparkles, AlertCircle, ChevronDown, ChevronUp, Bot, User, ArrowRight } from 'lucide-react';
+import { Send, Sparkles, AlertCircle, ChevronDown, ChevronUp, Bot, User, ArrowRight, Receipt } from 'lucide-react';
 import CitationPopover from './CitationPopover';
 import TaxComparisonCard from './TaxComparisonCard';
 import VerifiedMathCard from './VerifiedMathCard';
 import FormattedNarrative from './FormattedNarrative';
+import ReceiptUploadModal from './ReceiptUploadModal';
 import { getApiUrl } from '../api';
 
 export default function CACopilotView() {
@@ -12,6 +13,7 @@ export default function CACopilotView() {
   const [loading, setLoading] = useState(false);
   const [expandedTraceId, setExpandedTraceId] = useState(null);
   const [mode, setMode] = useState('auto'); // 'auto' | 'salary' | 'gst'
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   const presetChips = [
     { label: "💼 ₹45L Freelancer US Export & 44ADA", query: "I earned ₹45 Lakhs this year providing remote software engineering services to a US client. What are my GST LUT export rules, Section 44ADA presumptive tax, and advance tax liabilities?" },
@@ -305,30 +307,50 @@ export default function CACopilotView() {
             e.preventDefault();
             handleSend();
           }}
-          className="relative flex items-center"
+          className="relative flex items-center gap-2"
         >
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={
-              mode === 'salary'
-                ? "Enter your annual salary or CTC (e.g. 15 Lakhs) for Old vs New Regime calculation..."
-                : mode === 'gst'
-                ? "Enter commercial transaction (e.g. bought office laptops for ₹1.8 Lakhs) for GST & ITC..."
-                : "Ask about Salary, GST, Section 44ADA, Old vs New regime, capital gains..."
-            }
-            className="w-full pl-4 pr-12 py-3 rounded-xl bg-[#12151C] border border-[#232732] text-sm text-[#F5F6FA] placeholder-[#6B7280] focus:outline-none focus:border-[#5B5FEF] focus:ring-1 focus:ring-[#5B5FEF] transition-all"
-          />
+          {/* Upload Receipt / Invoice Button */}
           <button
-            type="submit"
-            disabled={!query.trim() || loading}
-            className="absolute right-2.5 p-2 rounded-lg bg-[#5B5FEF] text-white hover:bg-[#7477F5] disabled:opacity-40 disabled:hover:bg-[#5B5FEF] transition-colors"
+            type="button"
+            onClick={() => setIsReceiptModalOpen(true)}
+            className="px-3 py-2.5 rounded-xl bg-[#12151C] border border-[#232732] hover:border-[#5B5FEF]/60 text-[#A6ADBB] hover:text-[#5B5FEF] hover:bg-[#181C25] transition-all flex items-center gap-1.5 shrink-0 shadow-sm group"
+            title="Scan or Upload GST Invoice / Receipt"
           >
-            <Send className="w-4 h-4" />
+            <Receipt className="w-4 h-4 text-[#5B5FEF] group-hover:scale-110 transition-transform" />
+            <span className="text-xs font-medium hidden sm:inline text-white">Upload Receipt</span>
           </button>
+
+          <div className="relative flex-1 flex items-center">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={
+                mode === 'salary'
+                  ? "Enter your annual salary or CTC (e.g. 15 Lakhs) for Old vs New Regime calculation..."
+                  : mode === 'gst'
+                  ? "Enter commercial transaction (e.g. bought office laptops for ₹1.8 Lakhs) for GST & ITC..."
+                  : "Ask about Salary, GST, Section 44ADA, Old vs New regime, capital gains..."
+              }
+              className="w-full pl-4 pr-12 py-3 rounded-xl bg-[#12151C] border border-[#232732] text-sm text-[#F5F6FA] placeholder-[#6B7280] focus:outline-none focus:border-[#5B5FEF] focus:ring-1 focus:ring-[#5B5FEF] transition-all"
+            />
+            <button
+              type="submit"
+              disabled={!query.trim() || loading}
+              className="absolute right-2.5 p-2 rounded-lg bg-[#5B5FEF] text-white hover:bg-[#7477F5] disabled:opacity-40 disabled:hover:bg-[#5B5FEF] transition-colors"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
         </form>
       </div>
+
+      {/* Receipt & Tax Invoice Upload Inspector Modal */}
+      <ReceiptUploadModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        onSelectReceipt={(receiptQuery) => handleSend(receiptQuery)}
+      />
     </div>
   );
 }
