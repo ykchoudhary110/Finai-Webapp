@@ -1,5 +1,12 @@
 # FinAI — Offline Payment Reconciliation Agent
 
+> **Why no AI model?** Because financial math should never be probabilistic. 
+> FinAI uses AI-appropriate judgment — deciding *where* determinism matters — 
+> rather than using AI *for* the math itself.
+
+<!-- TODO: Replace screenshot.png with an actual screenshot of the Overview tab before submission -->
+![FinAI Dashboard Overview](./screenshot.png)
+
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-brightgreen?style=for-the-badge&logo=github)](https://ykchoudhary110.github.io/Finai-Webapp/)
 [![Track](https://img.shields.io/badge/Razorpay%20Buildathon-Track%2004%20(AI%20Finance%20Controller)-blue?style=for-the-badge)](https://github.com/ykchoudhary110/Finai-Webapp)
 [![Offline First](https://img.shields.io/badge/Architecture-100%25%20Offline%20%7C%20Deterministic-orange?style=for-the-badge)](https://github.com/ykchoudhary110/Finai-Webapp)
@@ -66,6 +73,15 @@ FinAI is **not** an AI chatbot wrapper. It is a **deterministic, auditable finan
 ## 📊 Data Source (Current Build)
 
 This build generates realistic synthetic transaction data on-device (seeded, non-repeating) to demonstrate the reconciliation engine deterministically and reproducibly — without requiring real merchant financial data for a public demo. The reconciliation engine itself is fully generic, operating on standard txn_id / amount / date fields, and is designed to plug directly into real Razorpay settlement CSVs, bank exports, and ERP ledger data via a file upload layer as a next step.
+
+---
+
+## 🚀 Roadmap
+- [ ] CSV/Excel upload for real Razorpay settlement, bank statement, and ERP exports
+- [ ] Support for common Indian bank statement formats (HDFC, ICICI, SBI, Axis)
+- [ ] Exportable reconciliation report (PDF/CSV) for accounting teams
+- [ ] Configurable matching tolerances (fee %, date drift window) per merchant
+- [ ] Multi-currency support for cross-border settlements
 
 ---
 
