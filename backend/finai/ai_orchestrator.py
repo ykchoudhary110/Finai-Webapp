@@ -9,9 +9,7 @@ import urllib.request
 import urllib.error
 from typing import Any
 
-from finai.rules import gst, income_tax, capital_gains, presumptive_44ada, presumptive_44ad, blocked_credit_17_5
 from finai.live_search import search_tax_statutes
-from finai.catalog import find_candidates
 
 logger = logging.getLogger(__name__)
 
