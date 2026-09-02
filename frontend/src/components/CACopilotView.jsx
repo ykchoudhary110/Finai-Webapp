@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Sparkles, AlertCircle, ChevronDown, ChevronUp, Bot, User, ArrowRight, Receipt } from 'lucide-react';
+import { Send, Sparkles, AlertCircle, ChevronDown, ChevronUp, Bot, User, ArrowRight, Receipt, CheckCircle2, ShieldCheck, Globe } from 'lucide-react';
 import CitationPopover from './CitationPopover';
 import TaxComparisonCard from './TaxComparisonCard';
 import VerifiedMathCard from './VerifiedMathCard';
@@ -14,6 +14,7 @@ export default function CACopilotView() {
   const [expandedTraceId, setExpandedTraceId] = useState(null);
   const [mode, setMode] = useState('auto'); // 'auto' | 'salary' | 'gst'
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [approvingId, setApprovingId] = useState(null);
 
   const presetChips = [
     { label: "💼 ₹45L Freelancer US Export & 44ADA", query: "I earned ₹45 Lakhs this year providing remote software engineering services to a US client. What are my GST LUT export rules, Section 44ADA presumptive tax, and advance tax liabilities?" },
@@ -67,6 +68,36 @@ export default function CACopilotView() {
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveAdvisory = async (msg) => {
+    if (approvingId === msg.id || msg.audit_record) return;
+    setApprovingId(msg.id);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/approve-advisory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: msg.query || query,
+          narrative: msg.narrative,
+          citations: msg.citations || [],
+          mode: mode,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const data = await res.json();
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id
+            ? { ...m, audit_record: data.audit_record, pending_approval: false }
+            : m
+        )
+      );
+    } catch (err) {
+      console.error("Failed to seal advisory in hash chain:", err);
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -129,8 +160,9 @@ export default function CACopilotView() {
                         <Bot className="w-3.5 h-3.5 text-[#5B5FEF]" />
                       </div>
                       <span className="text-xs font-semibold text-[#F5F6FA]">FinAI CA Advisory</span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#22C55E]/10 text-[#22C55E] border border-[#22C55E]/20 font-medium">
-                        Verified Statutory Trace
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#5B5FEF]/10 text-[#5B5FEF] border border-[#5B5FEF]/20 font-medium flex items-center gap-1">
+                        <Globe className="w-3 h-3 text-[#5B5FEF]" />
+                        <span>Live Internet Grounded</span>
                       </span>
                     </div>
 
@@ -145,89 +177,37 @@ export default function CACopilotView() {
                     )}
                   </div>
 
-                  {/* AI Narrative Body (Formatted clean text, not raw symbols) */}
+                  {/* AI Narrative Body (Formatted clean text from live internet) */}
                   <div className="text-sm text-[#A6ADBB] leading-relaxed">
                     <FormattedNarrative text={msg.narrative} />
                   </div>
 
-                  {/* Deterministic Tax Regime Comparison Card (if present) */}
-                  {msg.tax_comparison && (
-                    <TaxComparisonCard data={msg.tax_comparison} />
-                  )}
-
-                  {/* Deterministic Verified Math Card (if present) */}
-                  {msg.verified_math && (
-                    <VerifiedMathCard card={msg.verified_math} />
-                  )}
-
-                  {/* Expandable "Why this answer?" Statutory Audit Trace */}
-                  <div className="pt-2 border-t border-[#232732]">
-                    <button
-                      onClick={() => setExpandedTraceId(expandedTraceId === msg.id ? null : msg.id)}
-                      className="inline-flex items-center gap-1.5 text-xs font-mono text-[#5B5FEF] hover:text-[#7477F5] transition-colors font-medium"
-                    >
-                      <span>Why this answer? — Statutory & Computational Trace</span>
-                      {expandedTraceId === msg.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </button>
-
-                    {expandedTraceId === msg.id && (
-                      <div className="mt-2.5 p-4 rounded-xl bg-[#0B0E14] border border-[#232732] text-xs font-mono text-[#A6ADBB] space-y-3 animate-in fade-in">
-                        {/* Section 1: Step-by-Step Slab Calculation Breakdown */}
-                        {msg.tax_comparison?.trace_details?.slabs_breakdown && (
-                          <div className="space-y-1.5">
-                            <div className="text-white font-semibold text-[11px] uppercase tracking-wider flex items-center gap-1">
-                              <span>1. New Tax Regime Slab-by-Slab Computation (Budget 2024):</span>
-                            </div>
-                            <div className="p-2.5 rounded-lg bg-[#12151C] border border-[#232732]/60 divide-y divide-[#232732]/40 text-[11px]">
-                              {msg.tax_comparison.trace_details.slabs_breakdown.map((s, idx) => (
-                                <div key={idx} className="py-1 flex justify-between">
-                                  <span>{s.slab} ({s.rate}):</span>
-                                  <span className="text-white font-bold">{s.tax}</span>
-                                </div>
-                              ))}
-                              <div className="pt-1.5 flex justify-between font-bold text-white">
-                                <span>Total Net Tax Payable:</span>
-                                <span className="text-[#22C55E]">
-                                  ₹{msg.tax_comparison.new_regime.total_tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Section 2: Home Loan Filter Analysis */}
-                        {msg.tax_comparison?.trace_details?.old_regime_comparison && (
-                          <div className="space-y-1.5">
-                            <div className="text-white font-semibold text-[11px] uppercase tracking-wider flex items-center gap-1">
-                              <span>2. Why Home Loan Deductions Don't Beat the New Regime:</span>
-                            </div>
-                            <div className="p-2.5 rounded-lg bg-[#12151C] border border-[#232732]/60 space-y-1 text-[11px]">
-                              <div>● Old Regime Deductions Claimed: <span className="text-white">{msg.tax_comparison.trace_details.old_regime_comparison.deductions}</span></div>
-                              <div>● Old Regime Taxable Income: <span className="text-white">{msg.tax_comparison.trace_details.old_regime_comparison.taxable_income}</span></div>
-                              <div>● Old Regime Tax Payable: <span className="text-[#F59E0B] font-bold">{msg.tax_comparison.trace_details.old_regime_comparison.old_regime_tax}</span></div>
-                              <div className="text-[#22C55E] pt-1">
-                                ✔ New Regime saves you ₹{msg.tax_comparison.savings_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} because 5%, 10%, 15% slabs beat high 20% & 30% slabs!
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Section 3: Statutory Rules Verified */}
-                        <div className="space-y-1 text-[11px]">
-                          <div className="text-white font-semibold text-[11px] uppercase tracking-wider">
-                            3. Statutory Provisions Applied:
-                          </div>
-                          <div>● Finance Act 2024: Section 115BAC (Revised tax slabs & ₹75,000 standard deduction)</div>
-                          <div>● Income Tax Act 1961: Section 24(b) (Max ₹2,00,000 housing interest) & Section 80C (Max ₹1.5L)</div>
-                          <div>● Central GST Act 2017: Schedule III (Employee employment strictly exempt from GST)</div>
+                  {/* Approval & Immutable Hash Chain Action Bar */}
+                  <div className="pt-3 border-t border-[#232732]">
+                    {msg.audit_record ? (
+                      <div className="p-3.5 rounded-xl bg-[#0B0E14] border border-[#22C55E]/40 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                        <div className="flex items-center gap-2 text-[#22C55E] font-semibold">
+                          <ShieldCheck className="w-4 h-4 text-[#22C55E]" />
+                          <span>Approved by Taxpayer · Sealed in Hash Chain Block #{msg.audit_record.id}</span>
                         </div>
-
-                        {/* Section 4: Cryptographic Proof Checksum */}
-                        {msg.audit_record && (
-                          <div className="text-[#6B7280] text-[10px] pt-2 border-t border-[#232732]/60">
-                            Immutable Ledger Block: #{msg.audit_record.id} · SHA-256 Hash: {msg.audit_record.hash}
-                          </div>
-                        )}
+                        <div className="text-[#6B7280] text-[11px] truncate max-w-sm">
+                          SHA-256: <span className="text-white font-mono">{msg.audit_record.hash.slice(0, 18)}...</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-[#0B0E14] border border-[#232732]">
+                        <div className="text-xs text-[#A6ADBB]">
+                          <span className="font-semibold text-white">Taxpayer Review:</span> Verify the statutory advice above. Click Approve to cryptographically seal this log into the immutable SHA-256 hash chain for future audit defense.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleApproveAdvisory(msg)}
+                          disabled={approvingId === msg.id}
+                          className="px-4 py-2 rounded-xl bg-[#22C55E] hover:bg-[#16A34A] text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shrink-0 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>{approvingId === msg.id ? 'Sealing in Block...' : 'Approve & Put in Hash Chain'}</span>
+                        </button>
                       </div>
                     )}
                   </div>

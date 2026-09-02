@@ -42,6 +42,13 @@ class ChatRequest(BaseModel):
     history: list[dict] = Field(default_factory=list, description="Recent conversation turns for context")
 
 
+class ApproveAdvisoryRequest(BaseModel):
+    query: str = Field(..., description="User query associated with advisory")
+    narrative: str = Field(..., description="AI generated CA advisory narrative to be sealed")
+    citations: list[dict] = Field(default_factory=list, description="Statutory citations verified")
+    mode: str = Field(default="auto", description="Target calculator mode")
+
+
 class CalculateRequest(BaseModel):
     kind: str = Field(..., description="tax | gst | capital_gains | emi | presumptive_44ada | presumptive_44ad | hra")
     params: dict[str, Any] = Field(default_factory=dict)
@@ -110,23 +117,38 @@ def handle_chat(req: ChatRequest) -> dict[str, Any]:
     """
     Handle natural language financial scenarios.
     Executes live statutory search, contextual memory, and Google-grounded AI synthesis.
-    Logs transaction to cryptographic SHA-256 audit ledger.
+    Returns advisory with pending_approval status so the user can review before sealing in the hash chain.
     """
     try:
         response = orchestrate_ca_consultation(req.query, mode=req.mode, history=req.history)
-        # Save to audit ledger
-        audit_record = save_record(
-            kind="ca_consultation",
-            user_input={"query": req.query, "mode": req.mode},
-            result={
-                "has_math": bool(response.get("tax_comparison_card") or response.get("verified_math_card")),
-                "citations_count": len(response.get("citations", [])),
-            },
-        )
-        response["audit_record"] = audit_record
+        response["audit_record"] = None
+        response["pending_approval"] = True
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Consultation engine error: {str(e)}")
+
+
+@app.post("/api/approve-advisory")
+def approve_advisory(req: ApproveAdvisoryRequest) -> dict[str, Any]:
+    """
+    Cryptographically seal an approved CA advisory into the immutable SHA-256 audit hash chain.
+    Links to previous block hash and generates new verified ledger block.
+    """
+    try:
+        audit_record = save_record(
+            kind="approved_ca_advisory",
+            user_input={"query": req.query, "mode": req.mode},
+            result={
+                "advisory_summary": req.narrative[:300] + ("..." if len(req.narrative) > 300 else ""),
+                "citations_count": len(req.citations),
+                "citations": [c.get("citation_tag", "Statutory Source") for c in req.citations],
+                "verified_online": True,
+                "status": "APPROVED_BY_USER",
+            },
+        )
+        return {"status": "approved", "audit_record": audit_record}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Hash chain commit error: {str(e)}")
 
 
 @app.get("/api/stock-risk")

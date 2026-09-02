@@ -173,387 +173,74 @@ def _call_groq_api(prompt: str, search_context: str, api_key: str) -> str | None
     return None
 
 
-def orchestrate_ca_consultation(user_query: str, mode: str = "auto", history: list[dict] | None = None) -> dict[str, Any]:
+def orchestrate_ca_consultation(
+    user_query: str,
+    mode: str = "auto",
+    history: list[dict] | None = None,
+) -> dict[str, Any]:
     """
-    Main neuro-symbolic agent orchestrator:
-    1. Ingests conversation history for contextual memory.
-    2. Fetches live statutory context via web search.
-    3. Runs deterministic rule engines on detected amounts and scenarios.
-    4. Calls Gemini API (gemini-2.5-flash) with Google Search Grounding for human-like CA advisory.
-    5. Attaches verified math cards ONLY when calculations are requested.
+    Intelligent Internet-Grounded AI Chartered Accountant Consultation Engine.
+    1. Searches the live internet for up-to-date Indian tax statutes, circulars, and notifications.
+    2. Constructs conversational context from previous messages.
+    3. Calls Google Gemini (or Groq Llama 3.3) with live search grounding to perform dynamic reasoning,
+       calculation, and statutory compliance analysis.
+    4. Returns narrative with live internet citations for taxpayer review and cryptographic hash sealing.
     """
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    amounts = _extract_monetary_amounts(user_query)
-    primary_amount = amounts[0] if amounts else None
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
 
-    # Step 1: Live search for statutory citations
-    search_results = search_tax_statutes(user_query, max_results=3)
+    # Step 1: Live Internet Search for Statutory Citations & Circulars
+    search_results = search_tax_statutes(user_query, max_results=4)
     search_context_str = "\n".join(
         [f"- [{s['citation_tag']}] {s['title']}: {s['snippet']} (Source: {s['url']})" for s in search_results]
     )
 
-    # Step 2: Deterministic Rule Engines Triggering
-    verified_math_card = None
-    tax_comparison_card = None
-    q_lower = user_query.lower()
-
-    # Check for Home Loan / Deductions / How to file tax
-    is_home_loan = bool(re.search(r"\b(home\s*loan|housing\s*loan|loan|emi|borrowed|mortgage)\b", q_lower))
-    is_how_to_file = bool(re.search(r"\b(how\s+to\s+file|filing|file\s+thsi\s+tax|file\s+this\s+tax|file\s+tax|itr|sahaj)\b", q_lower))
-
-    if mode == "salary":
-        is_salary_or_employment = True
-        is_gst = False
-        is_income_tax = True
-        is_presumptive = False
-        is_capital_gains = False
-    elif mode == "gst":
-        is_salary_or_employment = False
-        is_gst = True
-        is_income_tax = False
-        is_presumptive = False
-        is_capital_gains = False
-    else:
-        # Explicit Salary / Employment check (handles typos: 'salery', 'salary', 'job', 'company', 'ctc', 'package')
-        is_salary_or_employment = bool(re.search(
-            r"\b(salery|salary|salaries|salaried|job|employed|employee|employment|ctc|annually|annual\s+income|per\s+annum|per\s+month|package|form\s*16|working\s+on\s+a\s+company|working\s+in\s+a\s+company|company\s+adn\s+got|company\s+and\s+got)\b",
-            q_lower
-        ))
-
-        # Check for GST transaction intent (strict word boundaries to prevent 'sale' inside 'salery')
-        is_gst = not is_salary_or_employment and not is_home_loan and bool(re.search(
-            r"\b(gst|sales|sale|purchase|purchased|invoice|invoicing|hsn|sac|interstate|igst|cgst|sgst|itc)\b",
-            q_lower
-        ))
-
-        # Check for Capital Gains intent
-        is_capital_gains = bool(re.search(
-            r"\b(capital\s+gain|capital\s+gains|stcg|ltcg|mutual\s+fund|mutual\s+funds|shares|equity|stocks)\b",
-            q_lower
-        ))
-
-        # Check for Freelancer / Presumptive intent
-        is_presumptive = not is_salary_or_employment and not is_home_loan and bool(re.search(
-            r"\b(freelancer|freelance|consultant|consulting|44ada|44ad|turnover|contractor)\b",
-            q_lower
-        ))
-
-        # Check for Personal Income Tax intent
-        is_income_tax = is_salary_or_employment or bool(re.search(
-            r"\b(income\s+tax|tax\s+regime|regime|deduction|80c|80d|hra|115bac|slab|slabs|tax\s+saving|old\s+regime|new\s+regime)\b",
-            q_lower
-        ))
-
-    # Look for salary amount either in the query or in recent conversation history
-    salary_amount = None
-    sal_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs|l)\s*(?:salary|salery|ctc|package|annually|annual)", q_lower)
-    if not sal_match:
-        sal_match = re.search(r"(?:salary|salery|ctc|package|annually|income)\s*(?:is|of|amounting to)?\s*(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs|l)?", q_lower)
-    if sal_match:
-        try:
-            salary_amount = float(sal_match.group(1)) * 100000.0
-        except ValueError:
-            pass
-
-    if not salary_amount and history:
-        for h in reversed(history):
-            h_text = (h.get("content") or "").lower()
-            h_amounts = _extract_monetary_amounts(h_text)
-            if any(w in h_text for w in ("salary", "salery", "ctc", "package", "annually", "income")) and h_amounts:
-                salary_amount = h_amounts[0]
-                break
-
-    if not salary_amount and ("15 lakh" in q_lower or "15lakh" in q_lower or "15,00,000" in q_lower):
-        salary_amount = 1500000.0
-
-    # Execute calculations ONLY when appropriate (never treat home loan as salary)
-    if is_home_loan or is_how_to_file:
-        verified_math_card = {
-            "type": "home_loan_analysis",
-            "title": "Home Loan Statutory Tax Deductions (Section 24b & 80C)",
-            "details": [
-                {"label": "Sec 24(b) Interest Deduction (Old Regime)", "value": "Max ₹2,00,000 / year"},
-                {"label": "Sec 80C Principal Deduction (Old Regime)", "value": "Max ₹1,50,000 / year"},
-                {"label": "New Tax Regime (Sec 115BAC)", "value": "Deductions Not Permitted (Self-Occupied)"},
-                {"label": "Recommended ITR Form", "value": "ITR-1 (Sahaj) for Salaried Employees"},
-                {"label": "Mandatory Bank Document", "value": "Annual Provisional Interest Certificate"},
-            ],
-            "computed_by": "RuleEngine:HomeLoan_Sec24b_80C",
-        }
-
-        # If salary is known from query or history, generate the exact final tax amount to pay!
-        if salary_amount:
-            new_reg = income_tax(salary_amount, "new")
-            old_reg = income_tax(salary_amount, "old", deductions=150000.0, home_loan=200000.0)
-            diff = abs(new_reg["total_tax"] - old_reg["total_tax"])
-            winner = "New Regime (Sec 115BAC)" if new_reg["total_tax"] <= old_reg["total_tax"] else "Old Regime"
-
-            tax_comparison_card = {
-                "type": "tax_regime_comparison",
-                "gross_income": salary_amount,
-                "winner": winner,
-                "savings_amount": diff,
-                "new_regime": new_reg,
-                "old_regime": old_reg,
-                "computed_by": "RuleEngine:IncomeTax_Budget2024",
-                "is_home_loan_adjusted": True,
-                "home_loan_deductions_applied": {
-                    "sec_24b_interest": 200000.0,
-                    "sec_80c_principal": 150000.0,
-                    "std_deduction": 50000.0,
-                    "total_deductions": 400000.0,
-                },
-                "filing_guidance": {
-                    "recommended_form": "ITR-1 (Sahaj)",
-                    "portal": "incometax.gov.in",
-                    "deadline": "31st July 2025",
-                    "final_tax_to_pay": new_reg["total_tax"] if winner.startswith("New") else old_reg["total_tax"],
-                },
-                "trace_details": {
-                    "salary": salary_amount,
-                    "slabs_breakdown": [
-                        {"slab": "₹0 to ₹4,00,000", "rate": "0%", "tax": "₹0.00"},
-                        {"slab": "₹4,00,000 to ₹8,00,000", "rate": "5%", "tax": "₹20,000.00"},
-                        {"slab": "₹8,00,000 to ₹12,00,000", "rate": "10%", "tax": "₹40,000.00"},
-                        {"slab": f"₹12,00,000 to ₹{max(0.0, salary_amount - 75000):,.0f}", "rate": "15%", "tax": "₹33,750.00"},
-                        {"slab": "4% Health & Education Cess", "rate": "4%", "tax": "₹3,750.00"},
-                    ],
-                    "old_regime_comparison": {
-                        "gross_salary": f"₹{salary_amount:,.2f}",
-                        "deductions": "₹4,00,000.00 (Std Ded ₹50k + Sec 24b ₹2L + Sec 80C ₹1.5L)",
-                        "taxable_income": f"₹{max(0.0, salary_amount - 400000):,.2f}",
-                        "old_regime_tax": f"₹{old_reg['total_tax']:,.2f}",
-                    },
-                    "statutory_rules": [
-                        "Section 115BAC: Default regime with lower progressive tax slabs (Finance Act 2024)",
-                        "Section 16(ia): Standard deduction enhanced to ₹75,000 for salaried employees",
-                        "Section 24(b): Up to ₹2,00,000 interest deduction on self-occupied housing loan (Old Regime only)",
-                        "Section 80C: Up to ₹1,50,000 principal repayment deduction (Old Regime only)",
-                        "Schedule III of CGST Act 2017: Employment salary is strictly exempt from GST",
-                    ],
-                },
-            }
-    elif primary_amount:
-        if is_income_tax or (not is_gst and not is_capital_gains and not is_presumptive):
-            # Compute Old vs New Regime
-            new_reg = income_tax(primary_amount, "new")
-            old_reg = income_tax(primary_amount, "old", deductions=150000.0)
-            diff = abs(new_reg["total_tax"] - old_reg["total_tax"])
-            winner = "New Regime (Sec 115BAC)" if new_reg["total_tax"] <= old_reg["total_tax"] else "Old Regime"
-
-            tax_comparison_card = {
-                "type": "tax_regime_comparison",
-                "gross_income": primary_amount,
-                "winner": winner,
-                "savings_amount": diff,
-                "new_regime": new_reg,
-                "old_regime": old_reg,
-                "computed_by": "RuleEngine:IncomeTax_Budget2024",
-            }
-        elif is_presumptive:
-            ada_res = presumptive_44ada(primary_amount)
-            tax_calc = income_tax(ada_res["taxable_profit"], "new")
-            verified_math_card = {
-                "type": "presumptive_44ada",
-                "title": "Section 44ADA Presumptive Taxation Analysis",
-                "gross_receipts": primary_amount,
-                "deemed_profit": ada_res["taxable_profit"],
-                "effective_tax": tax_calc["total_tax"],
-                "details": [
-                    {"label": "Gross Professional Receipts", "value": f"₹{primary_amount:,.2f}"},
-                    {"label": "Statutory Deemed Profit (50%)", "value": f"₹{ada_res['taxable_profit']:,.2f}"},
-                    {"label": "Estimated Tax Payable (New Regime)", "value": f"₹{tax_calc['total_tax']:,.2f}"},
-                    {"label": "Books of Accounts & Audit", "value": "Exempt up to ₹75 Lakhs"},
-                ],
-                "computed_by": "RuleEngine:Sec44ADA_Presumptive",
-            }
-        elif is_gst:
-            # 1. Extract explicit rate from query if provided by user (e.g. "with 5 % gst", "18% gst", "12 percent")
-            explicit_rate_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|\s*percent)\s*(?:gst|tax|rate)?", q_lower)
-            user_explicit_rate = float(explicit_rate_match.group(1)) if explicit_rate_match else None
-
-            # 2. Check for catalog candidates
-            candidates = find_candidates(user_query)
-            selected_item = candidates[0] if candidates else None
-
-            # 3. Detect Inward Supply (Purchase) vs Outward Supply (Sale)
-            is_purchase = bool(re.search(r"\b(bough|bought|buy|buying|purchase|purchased|inward|expense|acquired|paid\s+gst|machine|machinery|factory)\b", q_lower)) and not bool(re.search(r"\b(made\s+a\s+sale|sold|sale\s+of|outward)\b", q_lower))
-            is_sale = bool(re.search(r"\b(sale|sales|sold|outward|turnover|invoice\s+issued|selling)\b", q_lower))
-            is_capital_goods = bool(re.search(r"\b(machine|machinery|equipment|factory|plant|tools|capital\s*goods)\b", q_lower))
-
-            # Determine rate
-            if user_explicit_rate is not None:
-                final_rate = user_explicit_rate
-            elif selected_item:
-                final_rate = selected_item["rate"]
-            elif is_capital_goods:
-                final_rate = 18.0
-            else:
-                final_rate = 18.0
-
-            # Determine classification name & code
-            if is_capital_goods:
-                tariff_code = "HSN 8479"
-                item_name = "Capital Goods (Industrial Machinery & Factory Equipment)"
-            elif selected_item:
-                tariff_code = f"{selected_item['kind']} {selected_item['code']}"
-                item_name = selected_item["name"]
-            else:
-                tariff_code = f"HSN/SAC {final_rate:.0f}% Slab"
-                item_name = f"Commercial Goods/Services ({final_rate:.0f}% Slab)"
-
-            is_interstate = any(k in q_lower for k in ("interstate", "igst", "mumbai", "delhi", "bangalore", "outside state"))
-            gst_res = gst(primary_amount, final_rate, is_interstate)
-
-            # Check for prior Inward ITC from conversation history
-            prior_itc_amount = 0.0
-            if history:
-                for h in history:
-                    h_text = (h.get("content") or "").lower()
-                    if any(w in h_text for w in ("machine", "machinery", "factory", "bough", "bought", "purchase", "purchased")):
-                        h_amounts = _extract_monetary_amounts(h_text)
-                        h_rate_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:%|\s*percent)", h_text)
-                        h_rate = float(h_rate_match.group(1)) if h_rate_match else 18.0
-                        if h_amounts:
-                            pur_val = h_amounts[0]
-                            prior_itc_amount = round(pur_val * h_rate / 100.0, 2)
-                            break
-
-            if is_sale and (prior_itc_amount > 0 or "input" in q_lower):
-                # Sale with ITC Set-Off scenario
-                output_gst = gst_res["gst_amount"]
-                itc_claimed = min(output_gst, prior_itc_amount) if prior_itc_amount > 0 else 90000.0
-                net_cash_payable = max(0.0, output_gst - itc_claimed)
-
-                verified_math_card = {
-                    "type": "gst_reconciliation",
-                    "title": "GST Return Filing & Input Tax Credit Set-Off (GSTR-3B)",
-                    "taxable_value": primary_amount,
-                    "output_gst": output_gst,
-                    "itc_available": itc_claimed,
-                    "net_cash_payable": net_cash_payable,
-                    "rate": final_rate,
-                    "details": [
-                        {"label": "Gross Outward Supplies (Sale Turnover)", "value": f"₹{primary_amount:,.2f}"},
-                        {"label": f"Output GST Liability ({final_rate}% {gst_res['treatment']})", "value": f"₹{output_gst:,.2f}"},
-                        {"label": "Less: Input Tax Credit (Machine Purchase)", "value": f"−₹{itc_claimed:,.2f}"},
-                        {"label": "Net Cash Tax Payable via PMT-06 (GSTR-3B)", "value": f"₹{net_cash_payable:,.2f}"},
-                        {"label": "Net Cash Saved via ITC Offset", "value": f"₹{itc_claimed:,.2f}"},
-                        {"label": "GSTR-1 Outward Supply Deadline", "value": "11th of next month (gst.gov.in)"},
-                        {"label": "GSTR-3B Tax Payment Deadline", "value": "20th of next month (gst.gov.in)"},
-                        {"label": "Rule 86B Compliance", "value": "Compliant (Cash paid exceeds 1% threshold)"},
-                    ],
-                    "computed_by": "RuleEngine:GST_ITC_Reconciliation",
-                }
-            elif is_purchase or is_capital_goods:
-                # Inward Purchase / Machinery
-                bc_res = blocked_credit_17_5(user_query)
-                itc_status = "100% Eligible under Section 16 & Section 18 (Capital Goods)" if not bc_res["is_blocked"] else "Blocked under " + bc_res["section"]
-                verified_math_card = {
-                    "type": "gst_computation",
-                    "title": f"GST Inward Purchase & Capital Goods ITC — {item_name}",
-                    "taxable_value": primary_amount,
-                    "gst_amount": gst_res["gst_amount"],
-                    "invoice_total": gst_res["invoice_total"],
-                    "rate": final_rate,
-                    "hsn_sac": tariff_code,
-                    "itc_status": itc_status,
-                    "details": [
-                        {"label": "Classification", "value": f"{tariff_code} — {item_name}"},
-                        {"label": "Statutory Rate", "value": f"{final_rate}% ({gst_res['treatment']})"},
-                        {"label": "Taxable Value (Purchase Cost)", "value": f"₹{primary_amount:,.2f}"},
-                        {"label": "Input GST Paid to Supplier", "value": f"₹{gst_res['gst_amount']:,.2f}"},
-                        {"label": "Total Invoiced Amount Paid", "value": f"₹{gst_res['invoice_total']:,.2f}"},
-                        {"label": "Input Tax Credit (ITC) Available", "value": f"₹{gst_res['gst_amount']:,.2f} (Auto-drafted in GSTR-2B)"},
-                        {"label": "Section 16(3) Depreciation Rule", "value": f"Do NOT claim Section 32 Income Tax depreciation on ₹{gst_res['gst_amount']:,.2f} GST portion"},
-                    ],
-                    "computed_by": "RuleEngine:GST_CapitalGoods_ITC",
-                }
-            else:
-                # General Outward Sale
-                verified_math_card = {
-                    "type": "gst_computation",
-                    "title": f"GST Outward Invoicing Assessment — {item_name}",
-                    "taxable_value": primary_amount,
-                    "gst_amount": gst_res["gst_amount"],
-                    "invoice_total": gst_res["invoice_total"],
-                    "rate": final_rate,
-                    "hsn_sac": tariff_code,
-                    "itc_status": "Outward Taxable Supply (Output Tax Liability)",
-                    "details": [
-                        {"label": "Tariff Classification", "value": f"{tariff_code} — {item_name}"},
-                        {"label": "Statutory Rate", "value": f"{final_rate}% ({gst_res['treatment']})"},
-                        {"label": "Taxable Value (Sales Turnover)", "value": f"₹{primary_amount:,.2f}"},
-                        {"label": "Output GST Liability", "value": f"₹{gst_res['gst_amount']:,.2f}"},
-                        {"label": "Total Invoiced Amount", "value": f"₹{gst_res['invoice_total']:,.2f}"},
-                        {"label": "GSTR-1 Outward Return", "value": "Report in Table 4/5 by 11th of next month"},
-                        {"label": "GSTR-3B Tax Discharge", "value": "Report in Table 3.1(a) by 20th of next month"},
-                    ],
-                    "computed_by": "RuleEngine:GST_Deterministic",
-                }
-
-    # Step 3: Format conversation history
+    # Step 2: Format conversation history for full multi-turn memory
     history_str = ""
     if history:
         turns = []
-        for h in history[-4:]:
+        for h in history[-5:]:
             role = "User" if h.get("role") == "user" else "AI Chartered Accountant"
             content = h.get("content") or h.get("narrative") or ""
             if content:
-                turns.append(f"{role}: {content[:350]}")
+                turns.append(f"{role}: {content[:400]}")
         if turns:
             history_str = "PREVIOUS CONVERSATION CONTEXT:\n" + "\n".join(turns) + "\n\n"
 
-    # Step 4: Generate AI Advisory (via Gemini Search Grounding, Groq Free Backup, or Verified Synthesis)
-    ai_narrative = None
-    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-
-    math_summary = ""
-    if tax_comparison_card:
-        math_summary = (
-            f"STATUTORY TAX MATH: On Annual Salary/Income of ₹{primary_amount:,.2f}, New Regime (Sec 115BAC) Tax is ₹{tax_comparison_card['new_regime']['total_tax']:,.2f} "
-            f"(with ₹75,000 Standard Deduction under Sec 16(ia)). Old Regime Tax is ₹{tax_comparison_card['old_regime']['total_tax']:,.2f}. "
-            f"The {tax_comparison_card['winner']} saves ₹{tax_comparison_card['savings_amount']:,.2f}. "
-            f"NOTE: Under Schedule III of the CGST Act 2017, employee salary is strictly EXEMPT from GST. Do not mention 18% GST or SAC codes."
-        )
-    elif verified_math_card and verified_math_card.get("type") == "home_loan_analysis":
-        math_summary = "HOME LOAN RULES: Section 24(b) permits up to ₹2,00,000 interest deduction in Old Regime. Section 80C permits up to ₹1,50,000 principal deduction in Old Regime. In New Regime (Section 115BAC), self-occupied home loan deductions are disallowed."
-    elif verified_math_card and verified_math_card.get("type") == "gst_computation":
-        math_summary = f"STATUTORY GST MATH: {verified_math_card['title']} => Taxable Value: ₹{primary_amount:,.2f}, Rate: {verified_math_card['rate']}%, GST: ₹{verified_math_card['gst_amount']:,.2f}."
-    elif verified_math_card:
-        math_summary = f"STATUTORY MATH: {verified_math_card['title']} => Total Tax: ₹{verified_math_card.get('effective_tax', 0):,.2f}."
-
+    # Step 3: Online-Grounded AI CA Prompt
     augmented_prompt = (
         f"{history_str}"
-        f"USER CURRENT QUESTION: {user_query}\n\n"
-        f"[STATUTORY COMPUTATION RULES: {math_summary}]\n\n"
-        "INSTRUCTIONS FOR AI CHARTERED ACCOUNTANT:\n"
-        "1. Respond conversationally, authoritatively, and clearly like a real Senior Chartered Accountant.\n"
-        "2. Directly answer all parts of the user's question (e.g. how to file, which form to use, bank documents, deadlines, and exact tax savings).\n"
-        "3. Explicitly cite statutory provisions (e.g. Section 115BAC, Section 24b, Section 80C, Schedule III of CGST Act).\n"
-        "4. Seamlessly use previous conversation context (e.g. if the user previously stated their salary is ₹15 Lakhs, apply the home loan rules to that exact ₹15 Lakh salary)."
+        f"USER SCENARIO / FINANCIAL QUESTION: {user_query}\n\n"
+        "ONLINE STATUTORY INSTRUCTIONS FOR AI SENIOR CHARTERED ACCOUNTANT:\n"
+        "1. Ground your entire advisory in current Indian tax statutes (Income Tax Act 1961 Budget 2024 revisions, CGST Act 2017, CBIC circulars, and the live search results above).\n"
+        "2. Provide deep, reasoned legal analysis explaining WHY an amount is taxed, exempt, or eligible for credit.\n"
+        "3. For Salary / Income Tax: Compare New Tax Regime (Section 115BAC) vs Old Tax Regime, apply the ₹75,000 Standard Deduction under Section 16(ia), calculate the exact progressive tax amounts dynamically, and cite Schedule III exemption from GST.\n"
+        "4. For Loans & EMIs: Clearly explain that loan principal and monthly EMIs are borrowings/liabilities and NEVER taxable income. Detail Section 24(b) (₹2L interest) and Section 80C (₹1.5L principal) vs New Regime low slabs.\n"
+        "5. For Factory Machinery / Purchases: Classify under HSN 8479 Capital Goods, detail 100% Input Tax Credit (ITC) eligibility under Section 16/18, explain GSTR-2B reflection, and state the Section 16(3) Income Tax depreciation rule.\n"
+        "6. For Sales: Explain outward supply output GST liability, how to offset available Input Tax Credit from machinery or other purchases, and give step-by-step filing guide for GSTR-1 (by 11th) and GSTR-3B (by 20th).\n"
+        "7. Present your advice cleanly with clear markdown sections: Executive Summary, Statutory Math & Breakdown, Step-by-Step Filing Roadmap, and Legal Compliance Points."
     )
 
-    # 1. Primary: Google Gemini with Live Search Grounding
+    # Step 4: Call Cloud AI with Internet Search Grounding
+    ai_narrative = None
     if api_key:
         ai_narrative = _call_gemini_rest(augmented_prompt, search_context_str, api_key)
 
-    # 2. Free Secondary Backup: Groq Llama 3.3 70B
     if not ai_narrative and groq_key:
         ai_narrative = _call_groq_api(augmented_prompt, search_context_str, groq_key)
 
-    # 3. Deterministic Institutional Legal Synthesis (100% offline-ready fallback)
     if not ai_narrative:
+        amounts = _extract_monetary_amounts(user_query)
+        primary_amount = amounts[0] if amounts else None
         ai_narrative = _generate_institutional_synthesis(
-            user_query, primary_amount, tax_comparison_card, verified_math_card, search_results
+            user_query, primary_amount, None, None, search_results
         )
 
     return {
         "user_query": user_query,
         "narrative": ai_narrative,
-        "tax_comparison_card": tax_comparison_card,
-        "verified_math_card": verified_math_card,
         "citations": search_results,
+        "pending_approval": True,
         "api_online": bool(api_key or groq_key),
     }
 
