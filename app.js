@@ -98,6 +98,16 @@
     }
   }
 
+  // Helper: Extract only true actionable exceptions (matching "Exceptions Found" metric)
+  function getActionableExceptions(result) {
+    if (!result || !Array.isArray(result.exceptionRecords)) return [];
+    return result.exceptionRecords.filter(rec =>
+      rec.category === "DUPLICATE" ||
+      rec.category === "MISSING_IN_BANK" ||
+      rec.category === "UNRECOGNIZED_CHARGE"
+    );
+  }
+
   /**
    * Render Top 4 Metric Cards with synchronized count-up animations
    */
@@ -132,11 +142,12 @@
       if (elExceptionsMicro) elExceptionsMicro.textContent = `${criticalCount} critical action items`;
       if (elRiskMicro) elRiskMicro.textContent = `Unmatched capital sum`;
 
-      // Update Tab Badges
+      // Update Tab Badges — Exceptions badge MUST match Exceptions Found metric count exactly
+      const actionableExceptions = getActionableExceptions(result);
       const badgeMatched = document.getElementById("badge-matched");
       const badgeExceptions = document.getElementById("badge-exceptions");
       if (badgeMatched) badgeMatched.textContent = result.matchedRecords.length;
-      if (badgeExceptions) badgeExceptions.textContent = result.exceptionRecords.length;
+      if (badgeExceptions) badgeExceptions.textContent = actionableExceptions.length;
 
     } catch (err) {
       console.error("FinAI Error rendering metrics:", err);
@@ -179,23 +190,20 @@
   }
 
   /**
-   * Render Exceptions Table with active filter
+   * Render Exceptions Table with active filter (Only DUPLICATE, MISSING_IN_BANK, UNRECOGNIZED_CHARGE)
    */
-  function renderExceptionsTable(exceptionRecords, filter = "ALL") {
+  function renderExceptionsTable(actionableExceptions, filter = "ALL") {
     const tbody = document.getElementById("tbody-exceptions");
     if (!tbody) return;
 
     try {
-      if (!exceptionRecords || exceptionRecords.length === 0) {
+      if (!actionableExceptions || actionableExceptions.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" class="table-empty-state">Zero exceptions recorded. All transactions reconciled cleanly!</td></tr>`;
         return;
       }
 
-      const filtered = exceptionRecords.filter(rec => {
+      const filtered = actionableExceptions.filter(rec => {
         if (filter === "ALL") return true;
-        if (filter === "CRITICAL") {
-          return rec.category === "DUPLICATE" || rec.category === "MISSING_IN_BANK" || rec.category === "UNRECOGNIZED_CHARGE";
-        }
         return rec.category === filter;
       });
 
@@ -223,7 +231,7 @@
       tbody.innerHTML = html;
 
       // Update Filter counts in chips
-      updateFilterCounts(exceptionRecords);
+      updateFilterCounts(actionableExceptions);
 
     } catch (err) {
       console.error("Error rendering exceptions table:", err);
@@ -234,25 +242,20 @@
   /**
    * Update the numerical counts shown inside exception filter chips
    */
-  function updateFilterCounts(exceptionRecords) {
+  function updateFilterCounts(actionableExceptions) {
     try {
       const counts = {
-        all: exceptionRecords.length,
-        critical: 0,
-        fee: 0,
-        delayed: 0,
+        all: actionableExceptions.length,
         duplicate: 0,
         missing: 0,
         unrecognized: 0
       };
 
-      for (let i = 0; i < exceptionRecords.length; i++) {
-        const cat = exceptionRecords[i].category;
-        if (cat === "FEE_ADJUSTED") counts.fee++;
-        else if (cat === "DELAYED_SETTLEMENT") counts.delayed++;
-        else if (cat === "DUPLICATE") { counts.duplicate++; counts.critical++; }
-        else if (cat === "MISSING_IN_BANK") { counts.missing++; counts.critical++; }
-        else if (cat === "UNRECOGNIZED_CHARGE") { counts.unrecognized++; counts.critical++; }
+      for (let i = 0; i < actionableExceptions.length; i++) {
+        const cat = actionableExceptions[i].category;
+        if (cat === "DUPLICATE") counts.duplicate++;
+        else if (cat === "MISSING_IN_BANK") counts.missing++;
+        else if (cat === "UNRECOGNIZED_CHARGE") counts.unrecognized++;
       }
 
       const setVal = (id, val) => {
@@ -261,9 +264,6 @@
       };
 
       setVal("filter-count-all", counts.all);
-      setVal("filter-count-critical", counts.critical);
-      setVal("filter-count-fee", counts.fee);
-      setVal("filter-count-delayed", counts.delayed);
       setVal("filter-count-duplicate", counts.duplicate);
       setVal("filter-count-missing", counts.missing);
       setVal("filter-count-unrecognized", counts.unrecognized);
@@ -374,8 +374,9 @@
       // Render Matched Table
       renderMatchedTable(currentResult.matchedRecords);
 
-      // Render Exceptions Table
-      renderExceptionsTable(currentResult.exceptionRecords, activeExceptionFilter);
+      // Render Exceptions Table (only true actionable exceptions)
+      const actionableExceptions = getActionableExceptions(currentResult);
+      renderExceptionsTable(actionableExceptions, activeExceptionFilter);
 
       // Render Raw Data Tables
       renderRawData(currentDataset);
@@ -457,7 +458,8 @@
         activeExceptionFilter = chip.getAttribute("data-filter") || "ALL";
 
         if (currentResult) {
-          renderExceptionsTable(currentResult.exceptionRecords, activeExceptionFilter);
+          const actionableExceptions = getActionableExceptions(currentResult);
+          renderExceptionsTable(actionableExceptions, activeExceptionFilter);
         }
       });
     });
