@@ -63,6 +63,12 @@ FinAI is **not** an AI chatbot wrapper. It is a **deterministic, auditable finan
 
 ---
 
+## 📊 Data Source (Current Build)
+
+This build generates realistic synthetic transaction data on-device (seeded, non-repeating) to demonstrate the reconciliation engine deterministically and reproducibly — without requiring real merchant financial data for a public demo. The reconciliation engine itself is fully generic, operating on standard txn_id / amount / date fields, and is designed to plug directly into real Razorpay settlement CSVs, bank exports, and ERP ledger data via a file upload layer as a next step.
+
+---
+
 ## 🖥️ How to Use the Dashboard
 
 | Component | What It Does |
@@ -133,8 +139,6 @@ Right-click `index.html` and click **"Open with Live Server"**.
 
 ## 🌐 How to Run Online (GitHub Pages)
 
-This repository is already configured with an automated GitHub Pages deployment workflow.
-
 1. Visit the live hosted site directly:  
    👉 **[https://ykchoudhary110.github.io/Finai-Webapp/](https://ykchoudhary110.github.io/Finai-Webapp/)**
 2. If enabling Pages on a new fork:
@@ -154,8 +158,7 @@ Finai-Webapp/
 ├── reconciler.js        # Deterministic 3-way reconciliation engine (zero DOM access)
 ├── charts.js            # Responsive horizontal SVG/CSS classification bar chart renderer
 ├── app.js               # Application controller & DOM event wiring
-├── finai/               # Standalone mirror copy of all project files
-└── .github/workflows/   # Automated GitHub Pages CI/CD workflow
+└── finai/               # Standalone mirror copy of all project files
 ```
 
 ### Strict Separation of Concerns:
