@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 from typing import Any
-from finai.deterministic_math import parse_indian_number, money
+from finai.deterministic_math import parse_indian_number, money, normalize_tax_year
 
 
 def detect_tax_domain(query: str) -> str:
@@ -132,7 +132,7 @@ def extract_income_tax_facts(query: str) -> dict[str, Any]:
     q_lower = query.lower()
 
     # Split into clauses for entity-level precision (do not split on decimal numbers like 1.5)
-    clauses = re.split(r"\band\b|\bthen\b|;|,|(?<!\d)\.(?!\d)", query, flags=re.IGNORECASE)
+    clauses = re.split(r"\band\b|\bwith\b|\bplus\b|\bhaving\b|\bincluding\b|\bthen\b|;|,|(?<!\d)\.(?!\d)", query, flags=re.IGNORECASE)
 
     gross_salary = Decimal("0.00")
     sec_80c = Decimal("0.00")
@@ -177,15 +177,13 @@ def extract_income_tax_facts(query: str) -> dict[str, Any]:
             gross_salary = first_amt
 
     regime_requested = "COMPARE"
-    if "new regime" in q_lower:
-        regime_requested = "NEW"
-    elif "old regime" in q_lower:
-        regime_requested = "OLD"
+    fy_norm, ay_norm, is_explicit = normalize_tax_year(query)
 
     return {
         "tax_type": "INCOME_TAX",
-        "financial_year": "FY 2024-25",
-        "assessment_year": "AY 2025-26",
+        "financial_year": fy_norm,
+        "assessment_year": ay_norm,
+        "is_year_explicit": is_explicit,
         "gross_salary": gross_salary,
         "sec_80c": sec_80c,
         "sec_80d": sec_80d,

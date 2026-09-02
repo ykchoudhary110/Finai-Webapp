@@ -113,62 +113,93 @@ class TestGSTSuite:
 # ==============================================================================
 
 class TestIncomeTaxSuite:
-    def test_it_1_basic_salary(self):
-        """IT-1: Basic Salary ₹10L in New Regime with ₹75,000 std deduction."""
-        res = calculate_new_regime_tax(Decimal("1000000.00"))
+    def test_it_1_basic_salary_fy_2024_25(self):
+        """IT-1: Basic Salary ₹10L in FY 2024-25 uses 0-3L, 3-7L, 7-10L slabs."""
+        res = calculate_new_regime_tax(Decimal("1000000.00"), fy="FY 2024-25")
         assert res.gross_salary == Decimal("1000000.00")
         assert res.standard_deduction == Decimal("75000.00")
         assert res.taxable_income == Decimal("925000.00")
+        # 0-3L: 0, 3-7L: 20k, 7-9.25L: 22.5k -> 42.5k + 4% cess (1.7k) = 44,200
+        assert res.total_annual_tax == Decimal("44200.00")
 
-    def test_it_2_new_regime_slabs(self):
-        """IT-2: New Regime slabs verified under Budget 2024 revisions."""
-        res = calculate_new_regime_tax(Decimal("1500000.00"))
-        # Taxable = 15L - 75k = 14,25,000
-        # 0-4L: 0
-        # 4-8L @ 5%: 20,000
-        # 8-12L @ 10%: 40,000
-        # 12-14.25L @ 15%: 33,750
-        # Total slab tax: 93,750 + 4% cess (3,750) = 97,500.00
+    def test_it_2_new_regime_slabs_fy_2024_25(self):
+        """IT-2: Gross ₹15L in FY 2024-25 produces exactly ₹1,30,000 tax."""
+        res = calculate_new_regime_tax(Decimal("1500000.00"), fy="FY 2024-25")
+        assert res.financial_year == "FY 2024-25"
+        assert res.assessment_year == "AY 2025-26"
+        assert res.taxable_income == Decimal("1425000.00")
+        assert res.slab_tax == Decimal("125000.00")
+        assert res.health_education_cess == Decimal("5000.00")
+        assert res.total_annual_tax == Decimal("130000.00")
+
+    def test_it_2b_new_regime_slabs_fy_2025_26(self):
+        """IT-2b: Gross ₹15L in FY 2025-26 produces exactly ₹97,500 tax."""
+        res = calculate_new_regime_tax(Decimal("1500000.00"), fy="FY 2025-26")
+        assert res.financial_year == "FY 2025-26"
+        assert res.assessment_year == "AY 2026-27"
+        assert res.taxable_income == Decimal("1425000.00")
+        assert res.slab_tax == Decimal("93750.00")
+        assert res.health_education_cess == Decimal("3750.00")
         assert res.total_annual_tax == Decimal("97500.00")
 
-    def test_it_3_old_regime_deductions(self):
-        """IT-3: Old Regime deduction handling (₹50,000 std ded + 80C + 24b)."""
+    def test_it_3_87a_rebate_difference_between_years(self):
+        """IT-3: Section 87A rebate rules differ between FY 2024-25 (<=7L) and FY 2025-26 (<=12L)."""
+        # For ₹10 Lakh salary:
+        res_24 = calculate_new_regime_tax(Decimal("1000000.00"), fy="FY 2024-25")
+        res_25 = calculate_new_regime_tax(Decimal("1000000.00"), fy="FY 2025-26")
+
+        # In FY 2024-25: Taxable ₹9.25L > ₹7L threshold -> No rebate, pays ₹44,200
+        assert res_24.section_87a_rebate == Decimal("0.00")
+        assert res_24.total_annual_tax == Decimal("44200.00")
+
+        # In FY 2025-26: Taxable ₹9.25L <= ₹12L threshold -> Full rebate, pays ₹0.00
+        assert res_25.section_87a_rebate == res_25.slab_tax
+        assert res_25.total_annual_tax == Decimal("0.00")
+
+    def test_it_4_old_regime_deductions(self):
+        """IT-4: Old Regime deduction handling (₹50,000 std ded + 80C + 24b)."""
         res = calculate_old_regime_tax(
             Decimal("1500000.00"),
             sec_80c=Decimal("150000.00"),
             sec_24b=Decimal("200000.00"),
+            fy="FY 2024-25",
         )
         assert res.total_deductions == Decimal("400000.00")
         assert res.taxable_income == Decimal("1100000.00")
 
-    def test_it_4_regime_comparison(self):
-        """IT-4: Both regimes calculated independently without inference."""
-        comp = compare_tax_regimes(Decimal("1500000.00"), sec_80c=Decimal("150000.00"), sec_24b=Decimal("200000.00"))
-        assert "new_regime" in comp
-        assert "old_regime" in comp
-        assert comp["optimal_regime"] == "NEW"
+    def test_it_5_regime_comparison_same_year(self):
+        """IT-5: Comparison uses the SAME financial year on both sides."""
+        # For FY 2024-25:
+        comp_24 = compare_tax_regimes(Decimal("1500000.00"), sec_80c=Decimal("150000.00"), fy="FY 2024-25")
+        assert comp_24["financial_year"] == "FY 2024-25"
+        assert comp_24["new_regime"]["total_annual_tax"] == "130000.00"
+        assert comp_24["old_regime"]["total_annual_tax"] == "210600.00"
+        assert comp_24["tax_saved"] == "80600.00"
 
-    def test_it_5_80c_statutory_limit_capping(self):
-        """IT-5: Section 80C input above limit is capped at ₹1,50,000."""
+        # For FY 2025-26:
+        comp_25 = compare_tax_regimes(Decimal("1500000.00"), sec_80c=Decimal("150000.00"), fy="FY 2025-26")
+        assert comp_25["financial_year"] == "FY 2025-26"
+        assert comp_25["new_regime"]["total_annual_tax"] == "97500.00"
+        assert comp_25["old_regime"]["total_annual_tax"] == "210600.00"
+        assert comp_25["tax_saved"] == "113100.00"
+
+    def test_it_6_80c_statutory_limit_capping(self):
+        """IT-6: Section 80C input above limit is capped at ₹1,50,000."""
         res = calculate_old_regime_tax(Decimal("1000000.00"), sec_80c=Decimal("300000.00"))
         assert res.section_80c == Decimal("150000.00")
 
-    def test_it_6_hra_complete_info(self):
-        """IT-6: Deterministic HRA exemption calculated with complete inputs."""
+    def test_it_7_hra_complete_info(self):
+        """IT-7: Deterministic HRA exemption calculated with complete inputs."""
         exempt = calculate_hra_exemption_deterministic(
             basic_salary=Decimal("600000.00"),
             hra_received=Decimal("240000.00"),
             rent_paid=Decimal("300000.00"),
             is_metro=True,
         )
-        # Min of:
-        # 1. HRA: 2,40,000
-        # 2. 50% of Basic: 3,00,000
-        # 3. Rent - 10% basic: 3,00,000 - 60,000 = 2,40,000
         assert exempt == Decimal("240000.00")
 
-    def test_it_7_missing_hra_data(self):
-        """IT-7: Missing rent/basic salary returns ₹0 exemption without guessing."""
+    def test_it_8_missing_hra_data(self):
+        """IT-8: Missing rent/basic salary returns ₹0 exemption without guessing."""
         exempt = calculate_hra_exemption_deterministic(
             basic_salary=Decimal("0.00"),
             hra_received=Decimal("240000.00"),
@@ -176,25 +207,20 @@ class TestIncomeTaxSuite:
         )
         assert exempt == Decimal("0.00")
 
-    def test_it_8_financial_year(self):
-        """IT-8: Result explicitly tags FY 2024-25 / AY 2025-26."""
-        res = calculate_new_regime_tax(Decimal("1200000.00"))
-        assert res.financial_year == "FY 2024-25"
-        assert res.assessment_year == "AY 2025-26"
+    def test_it_9_year_normalization(self):
+        """IT-9: normalize_tax_year correctly parses various inputs."""
+        from finai.deterministic_math import normalize_tax_year
+        assert normalize_tax_year("in FY 2024-25")[:2] == ("FY 2024-25", "AY 2025-26")
+        assert normalize_tax_year("for 2025-26")[:2] == ("FY 2025-26", "AY 2026-27")
+        assert normalize_tax_year("AY 2026-27")[:2] == ("FY 2025-26", "AY 2026-27")
 
-    def test_it_9_cess_calculation(self):
-        """IT-9: 4% Health & Education cess computed on tax after rebate."""
-        res = calculate_new_regime_tax(Decimal("1500000.00"))
-        assert res.health_education_cess == Decimal("3750.00")
-
-    def test_it_10_rebate_87a(self):
-        """IT-10: Section 87A rebate provides full relief for taxable income up to ₹12 Lakhs."""
-        res = calculate_new_regime_tax(Decimal("1200000.00"))
-        assert res.total_annual_tax == Decimal("0.00")
-        assert res.section_87a_rebate == res.slab_tax
+    def test_it_10_cess_calculation(self):
+        """IT-10: 4% Health & Education cess computed on tax after rebate."""
+        res = calculate_new_regime_tax(Decimal("1500000.00"), fy="FY 2024-25")
+        assert res.health_education_cess == Decimal("5000.00")
 
     def test_it_11_llm_override_prevention(self):
-        """IT-11: Deterministic engine enforces ₹97,500 over any altered LLM numbers."""
-        res = calculate_new_regime_tax(Decimal("1500000.00"))
-        assert res.total_annual_tax == Decimal("97500.00")
-        assert res.total_annual_tax != Decimal("110000.00")
+        """IT-11: Deterministic engine enforces exact numbers over any altered LLM numbers."""
+        res = calculate_new_regime_tax(Decimal("1500000.00"), fy="FY 2024-25")
+        assert res.total_annual_tax == Decimal("130000.00")
+        assert res.total_annual_tax != Decimal("97500.00")

@@ -228,10 +228,14 @@ def _build_income_tax_deterministic_tables(comp: dict[str, Any]) -> tuple[str, s
     o = comp["old_regime"]
     rec = comp["recommendation"]
     saved = float(comp["tax_saved"])
+    fy = comp["financial_year"]
+    ay = comp["assessment_year"]
+    is_explicit = comp.get("is_year_explicit", False)
+    year_tag = f"{fy} ({ay})" if is_explicit else f"{fy} ({ay}) [Assumed Current Filing Year]"
 
     lines = [
-        f"#### Statutory Regime Comparison: New (Sec 115BAC) vs Old Regime\n",
-        "| Tax Computation Component | New Regime (Section 115BAC) | Old Tax Regime | Statutory Note / Section |",
+        f"#### Statutory Regime Comparison: {year_tag}\n",
+        f"| Tax Computation Component | New Regime ({fy}) | Old Tax Regime ({fy}) | Statutory Note / Section |",
         "| :--- | :--- | :--- | :--- |",
         f"| Gross Salary / CTC | ₹{float(n['gross_salary']):,.2f} | ₹{float(o['gross_salary']):,.2f} | Base Employment Earnings |",
         f"| Standard Deduction | ₹{float(n['standard_deduction']):,.2f} | ₹{float(o['standard_deduction']):,.2f} | Section 16(ia) Enhanced in Budget 2024 |",
@@ -240,14 +244,15 @@ def _build_income_tax_deterministic_tables(comp: dict[str, Any]) -> tuple[str, s
         f"| HRA Exemption (Sec 10(13A)) | ₹0.00 (Disallowed) | ₹{float(o['hra_exemption']):,.2f} | Minimum of 3 statutory conditions |",
         f"| **Total Deductions & Exemptions** | **₹{float(n['total_deductions']):,.2f}** | **₹{float(o['total_deductions']):,.2f}** | Total Chapter VI-A & Allowances |",
         f"| **Taxable Income** | **₹{float(n['taxable_income']):,.2f}** | **₹{float(o['taxable_income']):,.2f}** | Net Income subjected to Tax Slabs |",
-        f"| Slab-Calculated Tax | ₹{float(n['slab_tax']):,.2f} | ₹{float(o['slab_tax']):,.2f} | Progressive Slab Bracket Calculation |",
-        f"| Section 87A Tax Rebate | ₹{float(n['section_87a_rebate']):,.2f} | ₹{float(o['section_87a_rebate']):,.2f} | Full relief up to statutory threshold |",
+        f"| Slab-Calculated Tax | ₹{float(n['slab_tax']):,.2f} | ₹{float(o['slab_tax']):,.2f} | Year-Specific Progressive Bracket Calculation |",
+        f"| Section 87A Tax Rebate | ₹{float(n['section_87a_rebate']):,.2f} | ₹{float(o['section_87a_rebate']):,.2f} | Year-Specific 87A statutory threshold |",
         f"| Health & Education Cess (4%) | ₹{float(n['health_education_cess']):,.2f} | ₹{float(o['health_education_cess']):,.2f} | 4% mandatory cess on tax |",
         f"| **Final Annual Tax Liability** | **₹{float(n['total_annual_tax']):,.2f}** | **₹{float(o['total_annual_tax']):,.2f}** | **{rec}** |",
         f"| Estimated Monthly TDS | ₹{float(n['monthly_tds_estimate']):,.2f} | ₹{float(o['monthly_tds_estimate']):,.2f} | Employer Monthly Withholding |",
     ]
 
     proof = (
+        f"Tax Year: {fy} ({ay}). "
         f"New Regime Tax: ₹{float(n['total_annual_tax']):,.2f} (Taxable: ₹{float(n['taxable_income']):,.2f}). "
         f"Old Regime Tax: ₹{float(o['total_annual_tax']):,.2f} (Taxable: ₹{float(o['taxable_income']):,.2f}). "
         f"Tax Difference: ₹{saved:,.2f}. Optimal: {comp['optimal_regime']}."
@@ -317,6 +322,7 @@ def orchestrate_ca_consultation(
             hra_received=facts["hra_received"],
             rent_paid=facts["rent_paid"],
             is_metro=facts["is_metro"],
+            fy=facts["financial_year"],
         )
         precalculated_tables_md, deterministic_proof_str = _build_income_tax_deterministic_tables(comp)
 

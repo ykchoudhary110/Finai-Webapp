@@ -374,33 +374,57 @@ def calculate_hra_exemption_deterministic(
     return money(min(hra, pct_basic, rent_minus_10pct))
 
 
-def calculate_new_regime_tax(gross: Decimal, fy: str = "2024-25") -> RegimeResult:
+def normalize_tax_year(text: str) -> tuple[str, str, bool]:
+    """
+    Parse financial year or assessment year from user input.
+    Returns (financial_year, assessment_year, is_explicit).
+    """
+    t = text.lower()
+    if any(k in t for k in ("fy 2025-26", "fy 25-26", "2025-26", "25-26", "ay 2026-27", "ay 26-27")):
+        return "FY 2025-26", "AY 2026-27", True
+    if any(k in t for k in ("fy 2024-25", "fy 24-25", "2024-25", "24-25", "ay 2025-26", "ay 25-26")):
+        return "FY 2024-25", "AY 2025-26", True
+    # Default to current active filing financial year
+    return "FY 2024-25", "AY 2025-26", False
+
+
+def calculate_new_regime_tax(gross: Decimal, fy: str = "FY 2024-25") -> RegimeResult:
     """
     Section 115BAC (New Tax Regime):
-    Budget 2024 (AY 2025-26):
-    - Standard deduction: ₹75,000 for salaried employees
-    - Slabs:
-      0 - 4L: Nil
-      4L - 8L: 5%
-      8L - 12L: 10%
-      12L - 16L: 15%
-      16L - 20L: 20%
-      20L - 24L: 25%
-      Above 24L: 30%
-    - Rebate 87A: Full rebate if taxable income <= ₹12,00,000 (up to ₹25,000 tax free).
+    Strictly year-aware implementation distinguishing FY 2024-25 from FY 2025-26.
     """
+    fy_norm, ay_norm, _ = normalize_tax_year(fy)
+    gross_d = money(gross)
     std_ded = Decimal("75000.00")
-    taxable = max(Decimal("0.00"), gross - std_ded)
+    taxable = max(Decimal("0.00"), gross_d - std_ded)
 
-    slabs = [
-        (Decimal("400000"), Decimal("0.00")),
-        (Decimal("800000"), Decimal("0.05")),
-        (Decimal("1200000"), Decimal("0.10")),
-        (Decimal("1600000"), Decimal("0.15")),
-        (Decimal("2000000"), Decimal("0.20")),
-        (Decimal("2400000"), Decimal("0.25")),
-        (Decimal("999999999999"), Decimal("0.30")),
-    ]
+    if fy_norm == "FY 2024-25":
+        # FY 2024-25 (AY 2025-26) under Finance (No. 2) Act, 2024:
+        # Slabs: 0-3L (0%), 3-7L (5%), 7-10L (10%), 10-12L (15%), 12-15L (20%), >15L (30%)
+        # Section 87A Rebate: Available if taxable income <= ₹7,00,000 (max ₹25,000 relief)
+        slabs = [
+            (Decimal("300000"), Decimal("0.00")),
+            (Decimal("700000"), Decimal("0.05")),
+            (Decimal("1000000"), Decimal("0.10")),
+            (Decimal("1200000"), Decimal("0.15")),
+            (Decimal("1500000"), Decimal("0.20")),
+            (Decimal("999999999999"), Decimal("0.30")),
+        ]
+        rebate_threshold = Decimal("700000.00")
+    else:
+        # FY 2025-26 (AY 2026-27) revised/future structure:
+        # Slabs: 0-4L (0%), 4-8L (5%), 8-12L (10%), 12-16L (15%), 16-20L (20%), 20-24L (25%), >24L (30%)
+        # Section 87A Rebate: Available if taxable income <= ₹12,00,000 (full relief)
+        slabs = [
+            (Decimal("400000"), Decimal("0.00")),
+            (Decimal("800000"), Decimal("0.05")),
+            (Decimal("1200000"), Decimal("0.10")),
+            (Decimal("1600000"), Decimal("0.15")),
+            (Decimal("2000000"), Decimal("0.20")),
+            (Decimal("2400000"), Decimal("0.25")),
+            (Decimal("999999999999"), Decimal("0.30")),
+        ]
+        rebate_threshold = Decimal("1200000.00")
 
     lower = Decimal("0.00")
     slab_tax = Decimal("0.00")
@@ -414,9 +438,9 @@ def calculate_new_regime_tax(gross: Decimal, fy: str = "2024-25") -> RegimeResul
 
     slab_tax = money(slab_tax)
 
-    # 87A Rebate for New Regime: up to ₹12,00,000 with Budget 2024 revisions
+    # 87A Rebate based on applicable FY threshold
     rebate = Decimal("0.00")
-    if taxable <= Decimal("1200000.00"):
+    if taxable <= rebate_threshold:
         rebate = slab_tax
 
     tax_after_rebate = max(Decimal("0.00"), slab_tax - rebate)
@@ -435,10 +459,10 @@ def calculate_new_regime_tax(gross: Decimal, fy: str = "2024-25") -> RegimeResul
     monthly_tds = money(total_tax / Decimal("12"))
 
     return RegimeResult(
-        regime_name="New Regime (Section 115BAC - Default)",
-        financial_year="FY 2024-25",
-        assessment_year="AY 2025-26",
-        gross_salary=gross,
+        regime_name=f"New Regime (Section 115BAC - {fy_norm})",
+        financial_year=fy_norm,
+        assessment_year=ay_norm,
+        gross_salary=gross_d,
         standard_deduction=std_ded,
         section_80c=Decimal("0.00"),
         section_80d=Decimal("0.00"),
@@ -462,7 +486,7 @@ def calculate_old_regime_tax(
     sec_80d: Any = 0,
     sec_24b: Any = 0,
     hra_exempt: Any = 0,
-    fy: str = "2024-25",
+    fy: str = "FY 2024-25",
 ) -> RegimeResult:
     """
     Old Tax Regime:
@@ -470,13 +494,11 @@ def calculate_old_regime_tax(
     - Section 80C capped at ₹1,50,000
     - Section 80D capped at ₹25,000 (regular) or ₹50,000 (senior)
     - Section 24(b) Home loan interest capped at ₹2,00,000 for self-occupied
-    - Slabs:
-      0 - 2.5L: Nil
-      2.5L - 5L: 5%
-      5L - 10L: 20%
-      Above 10L: 30%
+    - Slabs: 0-2.5L (0%), 2.5-5L (5%), 5-10L (20%), >10L (30%)
     - Rebate 87A: If taxable income <= ₹5,00,000 (rebate up to ₹12,500).
     """
+    fy_norm, ay_norm, _ = normalize_tax_year(fy)
+    gross_d = money(gross)
     std_ded = Decimal("50000.00")
     c_80c = min(money(sec_80c), Decimal("150000.00"))
     c_80d = min(money(sec_80d), Decimal("50000.00"))
@@ -484,7 +506,7 @@ def calculate_old_regime_tax(
     c_hra = money(hra_exempt)
 
     total_ded = std_ded + c_80c + c_80d + c_24b + c_hra
-    taxable = max(Decimal("0.00"), gross - total_ded)
+    taxable = max(Decimal("0.00"), gross_d - total_ded)
 
     slabs = [
         (Decimal("250000"), Decimal("0.00")),
@@ -522,10 +544,10 @@ def calculate_old_regime_tax(
     monthly_tds = money(total_tax / Decimal("12"))
 
     return RegimeResult(
-        regime_name="Old Regime (With Exemptions & Deductions)",
-        financial_year="FY 2024-25",
-        assessment_year="AY 2025-26",
-        gross_salary=gross,
+        regime_name=f"Old Regime ({fy_norm})",
+        financial_year=fy_norm,
+        assessment_year=ay_norm,
+        gross_salary=gross_d,
         standard_deduction=std_ded,
         section_80c=c_80c,
         section_80d=c_80d,
@@ -552,32 +574,36 @@ def compare_tax_regimes(
     hra_received: Any = 0,
     rent_paid: Any = 0,
     is_metro: bool = True,
-    fy: str = "2024-25",
+    fy: str = "FY 2024-25",
 ) -> dict[str, Any]:
-    """Deterministically calculate both New and Old tax regimes and recommend the optimal one."""
+    """Deterministically calculate both New and Old tax regimes for the SAME financial year."""
+    fy_norm, ay_norm, is_explicit = normalize_tax_year(fy)
     gross = money(gross_salary)
     hra_exempt = calculate_hra_exemption_deterministic(basic_salary, hra_received, rent_paid, is_metro)
 
-    new_res = calculate_new_regime_tax(gross, fy=fy)
+    new_res = calculate_new_regime_tax(gross, fy=fy_norm)
     old_res = calculate_old_regime_tax(
-        gross, sec_80c=sec_80c, sec_80d=sec_80d, sec_24b=sec_24b, hra_exempt=hra_exempt, fy=fy
+        gross, sec_80c=sec_80c, sec_80d=sec_80d, sec_24b=sec_24b, hra_exempt=hra_exempt, fy=fy_norm
     )
 
     diff = old_res.total_annual_tax - new_res.total_annual_tax
     if diff > 0:
-        recommendation = f"New Regime saves ₹{diff:,.2f} annually"
+        recommendation = f"New Regime ({fy_norm}) saves ₹{diff:,.2f} annually"
         optimal_regime = "NEW"
         tax_saved = diff
     elif diff < 0:
-        recommendation = f"Old Regime saves ₹{abs(diff):,.2f} annually"
+        recommendation = f"Old Regime ({fy_norm}) saves ₹{abs(diff):,.2f} annually"
         optimal_regime = "OLD"
         tax_saved = abs(diff)
     else:
-        recommendation = "Both regimes yield identical tax"
+        recommendation = f"Both regimes yield identical tax for {fy_norm}"
         optimal_regime = "EQUAL"
         tax_saved = Decimal("0.00")
 
     return {
+        "financial_year": fy_norm,
+        "assessment_year": ay_norm,
+        "is_year_explicit": is_explicit,
         "new_regime": new_res.to_dict(),
         "old_regime": old_res.to_dict(),
         "recommendation": recommendation,
