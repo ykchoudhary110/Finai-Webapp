@@ -53,6 +53,7 @@ export default function CACopilotView() {
         verified_math: data.verified_math_card,
         citations: data.citations || [],
         audit_record: data.audit_record,
+        dual_model_consensus: data.dual_model_consensus,
       };
 
       setMessages((prev) => [...prev, aiMsg]);
@@ -176,6 +177,25 @@ export default function CACopilotView() {
                       </div>
                     )}
                   </div>
+
+                  {/* Dual-AI Anti-Hallucination Consensus Shield */}
+                  {msg.dual_model_consensus && (
+                    <div className="p-3 rounded-xl bg-[#0B0E14] border border-[#5B5FEF]/30 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-[#22C55E]" />
+                        <span className="font-semibold text-white">Dual-AI Anti-Hallucination Consensus:</span>
+                        <span className="px-2 py-0.5 rounded bg-[#22C55E]/15 text-[#22C55E] border border-[#22C55E]/30 font-bold">
+                          {msg.dual_model_consensus.score}% Match
+                        </span>
+                        <span className="text-[#A6ADBB] hidden md:inline">
+                          (Gemini 3.6 Flash 🤝 {msg.dual_model_consensus.model_b})
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#22C55E] font-medium flex items-center gap-1">
+                        <span>✓ {msg.dual_model_consensus.hallucination_risk}</span>
+                      </span>
+                    </div>
+                  )}
 
                   {/* AI Narrative Body (Formatted clean text from live internet) */}
                   <div className="text-sm text-[#A6ADBB] leading-relaxed">
