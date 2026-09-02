@@ -61,6 +61,7 @@ export default function FormattedNarrative({ text }) {
   const lines = text.split('\n');
   const elements = [];
   let currentList = [];
+  let currentTable = [];
 
   const flushList = () => {
     if (currentList.length > 0) {
@@ -78,12 +79,71 @@ export default function FormattedNarrative({ text }) {
     }
   };
 
+  const flushTable = () => {
+    if (currentTable.length >= 2) {
+      // First line is headers
+      const rawHeaders = currentTable[0].split('|').map((c) => c.trim()).filter(Boolean);
+      // Skip separator line (line with :--- or ---)
+      const rawRows = currentTable.slice(1).filter((line) => !line.match(/^\|[\s\-:]+\|$/));
+
+      elements.push(
+        <div key={`table-${elements.length}`} className="my-3 overflow-x-auto rounded-xl border border-[#232732] bg-[#0B0E14] shadow-sm">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-[#181C25] text-white uppercase text-[10px] tracking-wider border-b border-[#232732]">
+              <tr>
+                {rawHeaders.map((h, i) => (
+                  <th key={i} className="px-3.5 py-2.5 font-semibold text-white">
+                    {renderInlineContent(h)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#232732]/60 text-[#D1D5DB]">
+              {rawRows.map((line, rIdx) => {
+                const cells = line.split('|').map((c) => c.trim()).filter(Boolean);
+                return (
+                  <tr key={rIdx} className="hover:bg-[#12151C] transition-colors">
+                    {cells.map((cell, cIdx) => (
+                      <td key={cIdx} className="px-3.5 py-2.5 text-xs">
+                        {renderInlineContent(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+      currentTable = [];
+    } else if (currentTable.length > 0) {
+      currentTable.forEach((line, idx) => {
+        elements.push(
+          <p key={`tline-${elements.length}-${idx}`} className="text-sm text-[#A6ADBB] leading-relaxed my-1.5">
+            {renderInlineContent(line)}
+          </p>
+        );
+      });
+      currentTable = [];
+    }
+  };
+
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
 
     if (!trimmed) {
       flushList();
+      flushTable();
       return;
+    }
+
+    // Markdown Table Rows: | Col 1 | Col 2 |
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      flushList();
+      currentTable.push(trimmed);
+      return;
+    } else {
+      flushTable();
     }
 
     // Main Heading: ### Heading
@@ -148,6 +208,7 @@ export default function FormattedNarrative({ text }) {
   });
 
   flushList();
+  flushTable();
 
   return <div className="space-y-1.5 font-sans">{elements}</div>;
 }
