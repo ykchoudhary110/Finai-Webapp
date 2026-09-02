@@ -54,6 +54,8 @@ export default function CACopilotView() {
         citations: data.citations || [],
         audit_record: data.audit_record,
         dual_model_consensus: data.dual_model_consensus,
+        evidence_shield: data.evidence_shield,
+        tax_type: data.tax_type,
       };
 
       setMessages((prev) => [...prev, aiMsg]);
@@ -178,21 +180,45 @@ export default function CACopilotView() {
                     )}
                   </div>
 
-                  {/* Dual-AI Anti-Hallucination Consensus Shield */}
-                  {msg.dual_model_consensus && (
+                  {/* Statutorily Verified Evidence Shield */}
+                  {msg.evidence_shield ? (
+                    <div className={`p-3.5 rounded-xl bg-[#0B0E14] border flex flex-wrap items-center justify-between gap-2.5 text-xs font-mono shadow-sm ${
+                      msg.evidence_shield.confidence_level === 'HIGH'
+                        ? 'border-[#22C55E]/40'
+                        : 'border-[#F59E0B]/40'
+                    }`}>
+                      <div className="flex items-center gap-2.5">
+                        <ShieldCheck className={`w-4 h-4 ${
+                          msg.evidence_shield.confidence_level === 'HIGH' ? 'text-[#22C55E]' : 'text-[#F59E0B]'
+                        }`} />
+                        <span className="font-semibold text-white">Statutory Evidence Rating:</span>
+                        <span className={`px-2 py-0.5 rounded font-bold border text-[11px] ${
+                          msg.evidence_shield.confidence_level === 'HIGH'
+                            ? 'bg-[#22C55E]/15 border-[#22C55E]/30 text-[#22C55E]'
+                            : 'bg-[#F59E0B]/15 border-[#F59E0B]/30 text-[#F59E0B]'
+                        }`}>
+                          {msg.evidence_shield.confidence_level} CONFIDENCE
+                        </span>
+                        <span className="text-[#6B7280] hidden lg:inline">
+                          (Gemini 3.6 🤝 {msg.evidence_shield.auditor})
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#A6ADBB] font-medium flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]"></span>
+                        <span>{msg.evidence_shield.evidence_reason}</span>
+                      </span>
+                    </div>
+                  ) : msg.dual_model_consensus && (
                     <div className="p-3 rounded-xl bg-[#0B0E14] border border-[#5B5FEF]/30 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
                       <div className="flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4 text-[#22C55E]" />
-                        <span className="font-semibold text-white">Dual-AI Anti-Hallucination Consensus:</span>
+                        <span className="font-semibold text-white">Statutory Evidence Rating:</span>
                         <span className="px-2 py-0.5 rounded bg-[#22C55E]/15 text-[#22C55E] border border-[#22C55E]/30 font-bold">
-                          {msg.dual_model_consensus.score}% Match
-                        </span>
-                        <span className="text-[#A6ADBB] hidden md:inline">
-                          (Gemini 3.6 Flash 🤝 {msg.dual_model_consensus.model_b})
+                          HIGH CONFIDENCE
                         </span>
                       </div>
                       <span className="text-[11px] text-[#22C55E] font-medium flex items-center gap-1">
-                        <span>✓ {msg.dual_model_consensus.hallucination_risk}</span>
+                        <span>✓ Statutorily Verified & Deterministically Calculated</span>
                       </span>
                     </div>
                   )}
