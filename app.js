@@ -466,6 +466,22 @@
   }
 
   /**
+   * Generate a cryptographically strong or randomized fresh seed
+   */
+  function generateFreshSeed() {
+    try {
+      if (typeof window !== "undefined" && window.crypto && window.crypto.getRandomValues) {
+        const arr = new Uint32Array(1);
+        window.crypto.getRandomValues(arr);
+        return arr[0];
+      }
+    } catch (e) {
+      // Fallback
+    }
+    return Math.floor(Date.now() + Math.random() * 10000000);
+  }
+
+  /**
    * Set up "Re-run Reconciliation" Button with simulated working state and rotation
    */
   function setupRerunButton() {
@@ -496,7 +512,7 @@
       // Simulate 450ms agent calculation delay for live demo impact
       setTimeout(() => {
         try {
-          const newSeed = Math.floor(Date.now() + Math.random() * 100000);
+          const newSeed = generateFreshSeed();
           runReconciliation(newSeed);
         } finally {
           btn.disabled = false;
@@ -516,8 +532,8 @@
     setupExceptionFilters();
     setupRerunButton();
 
-    // Initial run on page load
-    runReconciliation(104928);
+    // Initial run on page load with fresh randomized seed (no hardcoded seed)
+    runReconciliation(generateFreshSeed());
   }
 
   if (document.readyState === "loading") {
