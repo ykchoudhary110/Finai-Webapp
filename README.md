@@ -1,141 +1,132 @@
-# FinAI — Institutional AI CA Copilot & Stock Risk Evaluator
+# FinAI — Offline Payment Reconciliation Agent
 
-> **Venture-grade FinTech platform for the Indian financial ecosystem.**  
-> Aesthetic Target: **Stripe × Linear × Perplexity × Wealthfront**
-
----
-
-## 🌟 Executive Summary
-
-**FinAI** is a production-grade dual-engine financial intelligence platform:
-1. **AI Chartered Accountant Copilot**: Real-time statutory tax advisory grounded in official CBIC circulars and Income Tax provisions via live web scraping. Powered by Google Gemini Flash with **deterministic Python rule engines** (IEEE-754 Decimal precision) ensuring zero mathematical hallucinations.
-2. **Real-Time Stock Market Risk & Health Evaluator**: Multi-factor quantitative scoring (0–100) for Indian stocks (NSE/BSE) across 4 pillars (Volatility, Valuation, Solvency, Quality). Strictly educational and SEBI-compliant with zero Buy/Sell/Hold recommendations.
-3. **Cryptographic Audit Ledger**: Immutable SHA-256 block chain for all consultations, calculations, and stock assessments with JSON/PDF export capabilities.
+> **Built for:** Razorpay Buildathon · Track 04: AI Finance Controller  
+> **Core Principle:** Deterministic financial reconciliation engine with a polished dashboard UI. Zero LLM calls. Zero hallucinations. 100% offline in-browser execution.
 
 ---
 
-## 🏛️ System Architecture
+## ⚡ Overview
+
+Financial controllers and treasury managers cannot tolerate hallucinations, latency, or data privacy risks when reconciling transaction ledgers with payment gateways and bank statements.
+
+**FinAI** is a **pure-client, zero-dependency, deterministic 3-way payment reconciliation engine** engineered to run entirely in the browser with **zero internet connection**. It evaluates multi-source financial feeds across **Razorpay Settlements**, **Internal ERP Ledgers**, and **Core Banking Statements**, instantly classifying transactions, isolating fee deductions, identifying timing transit delays, and detecting anomalous or fraudulent records.
+
+---
+
+## 🔒 Hard Constraints & Demo Guarantees
+
+| Constraint | FinAI Implementation |
+| :--- | :--- |
+| **Zero External Requests** | No CDN scripts, no Google Fonts, no remote images. 100% self-contained. |
+| **Offline First** | Works via `file://` protocol directly (double-click `index.html`) with zero console errors. |
+| **Deterministic Math** | Pure algorithms in O(N) time complexity. Same seed = identical output every time. |
+| **No LLM Hallucinations** | Pure rule-based classification heuristics. No floating-point math drift. |
+| **Zero Build Tools** | Vanilla HTML5, CSS3 Custom Properties, and ES6 JavaScript. No npm, no Vite, no React. |
+| **Fault Tolerant** | All operations wrapped in resilient `try/catch` handlers with graceful inline error states. |
+
+---
+
+## 📊 3-Way Reconciliation Engine Rules
+
+FinAI groups records into a hash index across `txn_id` and runs 5 deterministic classification rules:
 
 ```
-                               ┌─────────────────────────────┐
-                               │   Vite + React + Tailwind   │
-                               │  Stripe/Linear Design System│
-                               └──────────────┬──────────────┘
-                                              │ HTTP / JSON
-                                              ▼
-                               ┌─────────────────────────────┐
-                               │     FastAPI API Gateway     │
-                               └──────┬───────┬───────┬──────┘
-                                      │       │       │
-             ┌────────────────────────┘       │       └────────────────────────┐
-             ▼                                ▼                                ▼
-┌─────────────────────────┐      ┌─────────────────────────┐      ┌─────────────────────────┐
-│   Live Statutory Search │      │  Deterministic Math     │      │   Real-Time Stock Quant │
-│   DuckDuckGo Scraper    │      │  Decimal Rule Engines   │      │   Yahoo Finance API     │
-│   CBIC / Income Tax     │      │  GST/Tax/CG/44ADA/EMI   │      │   4-Pillar Score (0-100)│
-└────────────┬────────────┘      └────────────┬────────────┘      └────────────┬────────────┘
-             │                                │                                │
-             └───────────────────────┬────────┴────────────────────────────────┘
-                                     │
-                                     ▼
-                      ┌─────────────────────────────┐
-                      │    Gemini 1.5 Flash API     │
-                      │  Contextual Synthesis &     │
-                      │  Inline Citation Badges     │
-                      └──────────────┬──────────────┘
-                                     │
-                                     ▼
-                      ┌─────────────────────────────┐
-                      │   SQLite SHA-256 Ledger     │
-                      │  Immutable Audit Blockchain │
-                      └─────────────────────────────┘
+                                  [ Financial Feeds ]
+                                           │
+         ┌─────────────────────────────────┼─────────────────────────────────┐
+         ▼                                 ▼                                 ▼
+[ Razorpay Settlements ]         [ Internal ERP Ledger ]         [ Core Bank Statement ]
+         │                                 │                                 │
+         └─────────────────────────────────┼─────────────────────────────────┘
+                                           │
+                              [ O(N) Hash Index Construction ]
+                                           │
+         ┌─────────────────────────────────┴─────────────────────────────────┐
+         ▼                                                                   ▼
+[ Match Heuristics ]                                              [ Anomaly Detection ]
+ ├── 1. Clean Match (1:1 Exact)                                    ├── 4. Duplicate Billing
+ ├── 2. Fee Adjusted (~2% MDR Fee)                                 ├── 5. Missing in Bank
+ └── 3. Delayed Settlement (1-2 Day Float)                         └── 6. Unrecognized Charge
 ```
 
----
-
-## 🎨 Design System & Tokens
-
-FinAI implements Claude's exact dark-mode first design palette:
-
-| Token | Hex Code | Role |
-| :--- | :--- | :--- |
-| **Background Base** | `#0B0E14` | Main application canvas |
-| **Surface / Card** | `#12151C` | Elevated content surfaces |
-| **Elevated Hover** | `#181C25` | Interactive card states |
-| **Border Subtle** | `#232732` | 1px clean separation lines |
-| **Brand Navy** | `#1B2A4A` | Institutional badge backgrounds |
-| **Primary Accent** | `#5B5FEF` | Electric Indigo buttons & focus |
-| **Success / Savings** | `#22C55E` | Emerald Green tax savings & green flags |
-| **Warning** | `#F59E0B` | Amber regulatory caution flags |
-| **Risk / Blocked** | `#EF4444` | Crimson blocked credit & volatility alerts |
-| **Typography** | Inter + Geist/JetBrains Mono | Inter for narrative, Monospace for all financial numbers |
+1. **Clean Match (1:1)**:
+   - Exact ledger amount matches bank statement amount within ₹0.50 tolerance and identical transaction dates.
+2. **Fee Adjusted (~2% Razorpay MDR)**:
+   - Bank credit differs by Razorpay's standard ~2% settlement fee formula: `bankAmount = round(ledgerAmount * 0.98 - 2)`. Reconciles automatically without human intervention.
+3. **Delayed Settlement (Float / Transit Delay)**:
+   - Amount matches, but bank value date is 1–2 days after the order date due to banking holidays or settlement clearing windows.
+4. **Duplicate Ledger Entry (ERP Double-Billing)**:
+   - The same `txn_id` appears multiple times in the internal ledger against only one bank settlement credit. Flags capital discrepancy.
+5. **Missing in Bank (Unsettled / In Transit)**:
+   - Order recorded in internal ERP and settled in gateway, but zero bank credit received.
+6. **Unrecognized Bank Charge (Anomalous / Fraud Flag)**:
+   - Bank credit entry with no corresponding order or settlement record. Automatically flagged for forensic manual review.
 
 ---
 
-## 🚀 Quickstart Guide
+## 📁 Repository Structure
 
-### Prerequisites
-- **Python 3.10+** (Tested on Python 3.13)
-- **Node.js 18+** (Tested on Node.js v24)
-- **Git**
+```
+Finai-Webapp/
+├── index.html           # Structure & markup; zero CDNs, hand-coded inline SVGs
+├── style.css            # Design tokens, responsive CSS grid, table shells & animations
+├── data-generator.js    # Seeded PRNG synthetic dataset generator (zero DOM access)
+├── reconciler.js        # Deterministic reconciliation engine (zero DOM access)
+├── charts.js            # Responsive SVG/CSS horizontal bar chart renderer
+├── app.js               # Application controller & DOM event wiring
+└── finai/               # Standalone mirror copy for subdirectory execution
+```
 
-### 1-Click Launch (Windows)
-Double-click **`start.bat`** in the project root. It will automatically:
-1. Copy `.env.example` to `.env` (if missing).
-2. Install Python dependencies.
-3. Start the FastAPI backend on `http://localhost:8000`.
-4. Start the Vite React frontend on `http://localhost:5173`.
-5. Open your default browser.
+### Separation of Concerns
+- **`data-generator.js`**: Pure functions. Uses a Mulberry32 PRNG to generate controlled, reproducible datasets of 60–80 transactions with realistic Indian customer names, Razorpay settlements, bank statements, and injected edge cases.
+- **`reconciler.js`**: Pure functions. Takes raw datasets in, builds hash maps, applies classification heuristics, computes match rates, aggregates capital at risk, and outputs plain-English business reasons.
+- **`charts.js`**: Pure render component. Generates horizontal proportional breakdown bars with SVG category icons and staggered entrance transitions.
+- **`app.js`**: UI controller. Handles synchronized count-up animations, simulated agent execution delay (450ms), interactive category filters, tab switches, and accordion expansions.
 
-### Manual Launch
+---
 
-**1. Backend**:
+## 🚀 How to Run
+
+### Option 1: Direct File Launch (No Server Required)
+1. Clone or download this repository.
+2. Double-click **`index.html`** in your file manager (File Explorer / Finder).
+3. The app opens immediately via `file://` protocol with zero console warnings or errors.
+
+### Option 2: Local HTTP Server (Optional)
 ```bash
-cd backend
-python -m pip install -r requirements.txt
-python main.py
-```
+# Python
+python -m http.server 8000
 
-**2. Frontend**:
-```bash
-cd frontend
-npm install
-npm run dev
+# Or Node.js
+npx serve .
 ```
+Visit `http://localhost:8000`.
 
 ---
 
-## 🔑 Environment Configuration
+## 🧪 Verification Checklist for Judges
 
-Create a `.env` file in the project root:
-```env
-# Google Gemini API Key (Free tier from https://aistudio.google.com/)
-GEMINI_API_KEY=your_gemini_api_key_here
-
-# Server Configuration
-PORT=8000
-HOST=0.0.0.0
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-```
-*(Note: If `GEMINI_API_KEY` is omitted, FinAI gracefully switches to deterministic institutional synthesis with real math and live search).*
+1. **Verify Offline Isolation**:
+   - Open browser Developer Tools (`F12` or `Ctrl+Shift+I`).
+   - Go to the **Network** tab.
+   - Refresh the page or click **"Re-run Reconciliation"**.
+   - **Result:** **0 network requests**. No external fonts, no telemetry, no tracking scripts.
+2. **Test Engine Determinism & Resilience**:
+   - Click **"Re-run Reconciliation"** 5+ times rapidly.
+   - Observe smooth button feedback (spinning refresh icon, 450ms agent working delay).
+   - Metrics always land within consistent, realistic ranges (Match Rate ~70–75%, Exceptions never zero, Amount at Risk accurately calculated).
+3. **Inspect Plain-English Audit Explanations**:
+   - Navigate to the **"Exceptions"** tab.
+   - Filter by **"Fee Adjusted"**, **"Delayed"**, **"Duplicate"**, **"Missing"**, and **"Unrecognized"**.
+   - Notice the 3px color-coded left border on exception rows and clear audit rationale.
+4. **Audit Raw Data**:
+   - Navigate to the **"Raw Data"** tab.
+   - Expand the accordions to audit raw records across Razorpay Settlements, Bank Statement, and Internal Ledger.
 
 ---
 
-## 👨‍🏫 Presentation Guide for College Examiners & Hackathons
+## 🏆 Razorpay Buildathon Compliance
 
-1. **AI CA Copilot (With Live Search)**:
-   - Click the preset chip: *"💼 ₹45L Freelancer US Export & 44ADA"*.
-   - Point out the **inline citation pills** (`[CBIC Notification]`, `[Income Tax Dept]`).
-   - Hover over the citation pill to demonstrate the live popover preview.
-   - Show the **"⚙ Computed by Deterministic Rule Engine"** card proving zero hallucinated numbers.
-2. **Old vs New Tax Regime Comparison**:
-   - Click: *"📊 ₹18L Salary: Old vs New Regime Comparison"*.
-   - Point out the side-by-side comparison table, animated savings badge, and Section 87A rebate calculation.
-3. **Stock Risk & Health Evaluator**:
-   - Enter `RELIANCE`, `TCS`, or `ZOMATO`.
-   - Show the animated semicircular gauge sweep (0–100).
-   - Walk through the 4 quantitative sub-pillars (Volatility, Valuation, Solvency, Quality).
-   - Highlight the non-dismissible **SEBI educational disclaimer** to demonstrate regulatory compliance.
-4. **Cryptographic Audit Ledger**:
-   - Click **"Audit Drawer"** in the top bar.
-   - Show the immutable SHA-256 block hashes and click **"Export JSON"**.
+- **Track:** Track 04 — AI Finance Controller
+- **Design System:** Deep muted navy (`#1F3A5F`), forest green (`#2E7D5B`), amber gold (`#B8860B`), crimson red (`#C0392B`), clean tabular typography.
+- **License:** MIT

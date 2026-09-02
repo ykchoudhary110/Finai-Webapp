@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinAI — Offline Payment Reconciliation Agent</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-title-row">
+          <h1 class="app-title">FinAI</h1>
+          <span class="offline-pill" title="Fully offline deterministic engine running in-browser">
+            <span class="pulse-dot"></span> Offline
+          </span>
+        </div>
+        <p class="app-tagline">Deterministic payment reconciliation agent · Razorpay Buildathon (Track 04)</p>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-rerun" class="btn-primary" type="button" aria-label="Re-run reconciliation">
+          <svg class="refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span id="btn-rerun-text">Re-run Reconciliation</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- METRICS ROW (4 Cards) -->
+    <section class="metrics-grid" aria-label="Reconciliation summary metrics">
+      <!-- Card 1: Total Transactions -->
+      <div class="metric-card">
+        <div class="metric-label">Total Transactions</div>
+        <div class="metric-value" id="metric-total">0</div>
+        <div class="metric-micro">
+          <span class="metric-dot dot-default"></span>
+          <span id="metric-total-micro">Base records evaluated</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Match Rate % -->
+      <div class="metric-card">
+        <div class="metric-label">Match Rate %</div>
+        <div class="metric-value highlight-success" id="metric-rate">0.0%</div>
+        <div class="metric-micro">
+          <span class="metric-dot dot-success"></span>
+          <span id="metric-rate-micro">Clean + auto-adjusted</span>
+        </div>
+      </div>
+
+      <!-- Card 3: Exceptions Found -->
+      <div class="metric-card">
+        <div class="metric-label">Exceptions Found</div>
+        <div class="metric-value" id="metric-exceptions">0</div>
+        <div class="metric-micro">
+          <span class="metric-dot dot-warning"></span>
+          <span id="metric-exceptions-micro">Requiring review</span>
+        </div>
+      </div>
+
+      <!-- Card 4: Amount at Risk -->
+      <div class="metric-card">
+        <div class="metric-label">Amount at Risk ₹</div>
+        <div class="metric-value highlight-danger" id="metric-risk">₹0</div>
+        <div class="metric-micro">
+          <span class="metric-dot dot-danger"></span>
+          <span id="metric-risk-micro">Unmatched capital sum</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB NAVIGATION -->
+    <nav class="tab-bar-container" role="tablist" aria-label="Reconciliation views">
+      <button class="tab-btn active" role="tab" id="tab-overview" data-target="pane-overview" aria-selected="true">
+        Overview
+      </button>
+      <button class="tab-btn" role="tab" id="tab-matched" data-target="pane-matched" aria-selected="false">
+        Matched <span class="tab-count-badge" id="badge-matched">0</span>
+      </button>
+      <button class="tab-btn" role="tab" id="tab-exceptions" data-target="pane-exceptions" aria-selected="false">
+        Exceptions <span class="tab-count-badge" id="badge-exceptions">0</span>
+      </button>
+      <button class="tab-btn" role="tab" id="tab-raw" data-target="pane-raw" aria-selected="false">
+        Raw Data <span class="tab-count-badge" id="badge-raw">3 Sources</span>
+      </button>
+    </nav>
+
+    <!-- TAB CONTENT PANES -->
+    <main class="tab-content-area">
+
+      <!-- PANE 1: OVERVIEW -->
+      <div class="tab-pane active" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview">
+        <div class="card" id="overview-chart-card">
+          <div id="chart-mount"></div>
+        </div>
+
+        <div class="engine-health-banner">
+          <div class="health-stat-box">
+            <span class="health-stat-title">Execution Mode</span>
+            <span class="health-stat-value">Deterministic O(N) Engine</span>
+          </div>
+          <div class="health-stat-box">
+            <span class="health-stat-title">Network Isolation</span>
+            <span class="health-stat-value">100% In-Memory (Zero API Calls)</span>
+          </div>
+          <div class="health-stat-box">
+            <span class="health-stat-title">Reconciliation Rules</span>
+            <span class="health-stat-value">5 Deterministic Match Heuristics</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANE 2: MATCHED TRANSACTIONS -->
+      <div class="tab-pane" id="pane-matched" role="tabpanel" aria-labelledby="tab-matched">
+        <div class="card">
+          <div class="table-card-header">
+            <div class="table-title-group">
+              <h2 class="table-card-title">Reconciled Matches</h2>
+              <span class="offline-pill" id="matched-sub-pill">100% Verified</span>
+            </div>
+            <div class="chart-subtitle">Clean 1:1 ledger and bank settlement records</div>
+          </div>
+
+          <div class="table-scroll-shell">
+            <table class="data-table" id="table-matched">
+              <thead>
+                <tr>
+                  <th>Transaction ID</th>
+                  <th>Order ID</th>
+                  <th>Customer</th>
+                  <th class="text-right">Amount (₹)</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-matched">
+                <!-- Injected via app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANE 3: EXCEPTIONS -->
+      <div class="tab-pane" id="pane-exceptions" role="tabpanel" aria-labelledby="tab-exceptions">
+        <div class="card">
+          <div class="table-card-header">
+            <div class="table-title-group">
+              <h2 class="table-card-title">Exceptions & Discrepancies</h2>
+              <span class="chart-subtitle">Categorized anomalies and adjustment items</span>
+            </div>
+
+            <!-- Filter chips -->
+            <div class="filter-chips-group" id="exception-filter-chips">
+              <button class="filter-chip active" data-filter="ALL">All (<span id="filter-count-all">0</span>)</button>
+              <button class="filter-chip" data-filter="CRITICAL">Action Required (<span id="filter-count-critical">0</span>)</button>
+              <button class="filter-chip" data-filter="FEE_ADJUSTED">Fee Adjusted (<span id="filter-count-fee">0</span>)</button>
+              <button class="filter-chip" data-filter="DELAYED_SETTLEMENT">Delayed (<span id="filter-count-delayed">0</span>)</button>
+              <button class="filter-chip" data-filter="DUPLICATE">Duplicate (<span id="filter-count-duplicate">0</span>)</button>
+              <button class="filter-chip" data-filter="MISSING_IN_BANK">Missing (<span id="filter-count-missing">0</span>)</button>
+              <button class="filter-chip" data-filter="UNRECOGNIZED_CHARGE">Unrecognized (<span id="filter-count-unrecognized">0</span>)</button>
+            </div>
+          </div>
+
+          <div class="table-scroll-shell">
+            <table class="data-table" id="table-exceptions">
+              <thead>
+                <tr>
+                  <th>Transaction ID</th>
+                  <th>Category</th>
+                  <th class="text-right">Amount (₹)</th>
+                  <th>Plain-English Reason</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-exceptions">
+                <!-- Injected via app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANE 4: RAW DATA ACCORDIONS -->
+      <div class="tab-pane" id="pane-raw" role="tabpanel" aria-labelledby="tab-raw">
+        <div class="raw-accordion-stack">
+          
+          <!-- Accordion 1: Razorpay Settlements -->
+          <div class="accordion-item expanded" id="acc-razorpay">
+            <button class="accordion-header" type="button">
+              <div class="accordion-title-group">
+                <span class="accordion-title">Razorpay Settlements</span>
+                <span class="accordion-badge" id="acc-count-settlements">0 records</span>
+              </div>
+              <span class="accordion-chevron">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </span>
+            </button>
+            <div class="accordion-body">
+              <div class="table-scroll-shell">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Transaction ID</th>
+                      <th class="text-right">Amount (₹)</th>
+                      <th>Settlement Date</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-raw-settlements"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Accordion 2: Bank Statement -->
+          <div class="accordion-item" id="acc-bank">
+            <button class="accordion-header" type="button">
+              <div class="accordion-title-group">
+                <span class="accordion-title">Bank Statement</span>
+                <span class="accordion-badge" id="acc-count-bank">0 records</span>
+              </div>
+              <span class="accordion-chevron">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </span>
+            </button>
+            <div class="accordion-body">
+              <div class="table-scroll-shell">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Reference ID</th>
+                      <th class="text-right">Amount (₹)</th>
+                      <th>Value Date</th>
+                      <th>Narration</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-raw-bank"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Accordion 3: Internal Ledger -->
+          <div class="accordion-item" id="acc-ledger">
+            <button class="accordion-header" type="button">
+              <div class="accordion-title-group">
+                <span class="accordion-title">Internal Ledger</span>
+                <span class="accordion-badge" id="acc-count-ledger">0 records</span>
+              </div>
+              <span class="accordion-chevron">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </span>
+            </button>
+            <div class="accordion-body">
+              <div class="table-scroll-shell">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Order ID</th>
+                      <th>Transaction ID</th>
+                      <th>Customer Name</th>
+                      <th class="text-right">Amount (₹)</th>
+                      <th>Order Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-raw-ledger"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <p>FinAI — Deterministic reconciliation engine. Runs fully offline, no data leaves this browser.</p>
+      <p>Track 04: AI Finance Controller · Built for Razorpay Buildathon</p>
+    </footer>
+
+  </div>
+
+  <!-- Pure Vanilla Scripts Loaded at Bottom of Body in Order -->
+  <script src="data-generator.js"></script>
+  <script src="reconciler.js"></script>
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
