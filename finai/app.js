@@ -381,6 +381,12 @@
       // Render Raw Data Tables
       renderRawData(currentDataset);
 
+      // Render AI Insight Summary (Rule-based NLG, 100% offline)
+      const insightEl = document.getElementById("insight-text");
+      if (insightEl && typeof generateInsightSummary === "function") {
+        insightEl.textContent = generateInsightSummary(currentResult, seed);
+      }
+
     } catch (err) {
       console.error("FinAI runReconciliation failed:", err);
     }
